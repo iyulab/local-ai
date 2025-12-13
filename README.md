@@ -57,13 +57,13 @@ float[] embedding = await model.EmbedAsync("Hello, world!");
 | [LocalAI.Embedder](docs/embedder.md) | Text → Vector embeddings | [![NuGet](https://img.shields.io/nuget/v/LocalAI.Embedder.svg)](https://www.nuget.org/packages/LocalAI.Embedder) |
 | [LocalAI.Reranker](docs/reranker.md) | Semantic reranking for search | [![NuGet](https://img.shields.io/nuget/v/LocalAI.Reranker.svg)](https://www.nuget.org/packages/LocalAI.Reranker) |
 | [LocalAI.Generator](docs/generator.md) | Text generation & chat | [![NuGet](https://img.shields.io/nuget/v/LocalAI.Generator.svg)](https://www.nuget.org/packages/LocalAI.Generator) |
-| LocalAI.Transcriber | Speech → Text (Whisper) | 📋 Planned |
-| LocalAI.Synthesizer | Text → Speech | 📋 Planned |
+| LocalAI.Ocr | Document OCR | 📋 Planned |
+| LocalAI.Captioner | Image → Text | 📋 Planned |
 | LocalAI.Translator | Neural machine translation | 📋 Planned |
 | LocalAI.Detector | Object detection | 📋 Planned |
 | LocalAI.Segmenter | Image segmentation | 📋 Planned |
-| LocalAI.Ocr | Document OCR | 📋 Planned |
-| LocalAI.Captioner | Image → Text | 📋 Planned |
+| LocalAI.Transcriber | Speech → Text (Whisper) | 📋 Planned |
+| LocalAI.Synthesizer | Text → Speech | 📋 Planned |
 
 ---
 

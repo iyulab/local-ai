@@ -50,6 +50,8 @@
   <PropertyGroup Condition="'$(Configuration)' == 'Release'">
     <DebugType>embedded</DebugType>
     <DebugSymbols>true</DebugSymbols>
+    <!-- Symbols are embedded in DLLs, no need for separate snupkg -->
+    <IncludeSymbols>false</IncludeSymbols>
   </PropertyGroup>
 
 </Project>

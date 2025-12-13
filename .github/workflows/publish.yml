@@ -58,6 +58,11 @@ jobs:
         if: steps.check.outputs.SKIP != 'true'
         run: |
           for package in ./artifacts/*.nupkg; do
+            # Skip symbol packages (snupkg) - symbols are embedded in DLLs
+            if [[ "$package" == *.snupkg ]]; then
+              echo "Skipping symbol package: $package"
+              continue
+            fi
             echo "Publishing $package"
             dotnet nuget push "$package" \
               --api-key ${{ secrets.NUGET_API_KEY }} \
