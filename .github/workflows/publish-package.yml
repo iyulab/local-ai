@@ -1,0 +1,77 @@
+name: Publish Individual Package
+
+on:
+  push:
+    tags:
+      - 'core-v*'      # LocalAI.Core releases
+      - 'embedder-v*'  # LocalAI.Embedder releases
+      - 'reranker-v*'  # LocalAI.Reranker releases
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Determine package and version
+        id: info
+        run: |
+          TAG=${GITHUB_REF#refs/tags/}
+
+          if [[ "$TAG" == core-v* ]]; then
+            VERSION=${TAG#core-v}
+            PROJECT="src/LocalAI.Core/LocalAI.Core.csproj"
+            PACKAGE="LocalAI.Core"
+          elif [[ "$TAG" == embedder-v* ]]; then
+            VERSION=${TAG#embedder-v}
+            PROJECT="src/LocalAI.Embedder/LocalAI.Embedder.csproj"
+            PACKAGE="LocalAI.Embedder"
+          elif [[ "$TAG" == reranker-v* ]]; then
+            VERSION=${TAG#reranker-v}
+            PROJECT="src/LocalAI.Reranker/LocalAI.Reranker.csproj"
+            PACKAGE="LocalAI.Reranker"
+          else
+            echo "Unknown tag format: $TAG"
+            exit 1
+          fi
+
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "PROJECT=$PROJECT" >> $GITHUB_OUTPUT
+          echo "PACKAGE=$PACKAGE" >> $GITHUB_OUTPUT
+          echo "Publishing $PACKAGE version $VERSION"
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --configuration Release --no-restore
+
+      - name: Pack
+        run: |
+          dotnet pack ${{ steps.info.outputs.PROJECT }} \
+            --configuration Release \
+            --output ./artifacts \
+            -p:PackageVersion=${{ steps.info.outputs.VERSION }}
+
+      - name: Push to NuGet
+        run: |
+          dotnet nuget push "./artifacts/${{ steps.info.outputs.PACKAGE }}.${{ steps.info.outputs.VERSION }}.nupkg" \
+            --api-key ${{ secrets.NUGET_API_KEY }} \
+            --source https://api.nuget.org/v3/index.json \
+            --skip-duplicate
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: ./artifacts/*.nupkg
+          name: ${{ steps.info.outputs.PACKAGE }} ${{ steps.info.outputs.VERSION }}
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

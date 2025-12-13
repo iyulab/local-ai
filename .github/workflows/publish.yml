@@ -1,0 +1,70 @@
+name: Publish to NuGet
+
+on:
+  push:
+    tags:
+      - 'v*'  # Triggers on version tags like v0.1.0, v1.0.0
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          TAG=${GITHUB_REF#refs/tags/v}
+          echo "VERSION=$TAG" >> $GITHUB_OUTPUT
+          echo "Extracted version: $TAG"
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --configuration Release --no-restore
+
+      - name: Test
+        run: dotnet test --configuration Release --no-build --verbosity normal
+        if: hashFiles('tests/**/*.csproj') != ''
+
+      - name: Pack with version from tag
+        run: |
+          dotnet pack src/LocalAI.Core/LocalAI.Core.csproj \
+            --configuration Release \
+            --output ./artifacts \
+            -p:PackageVersion=${{ steps.version.outputs.VERSION }}
+
+          dotnet pack src/LocalAI.Embedder/LocalAI.Embedder.csproj \
+            --configuration Release \
+            --output ./artifacts \
+            -p:PackageVersion=${{ steps.version.outputs.VERSION }}
+
+          dotnet pack src/LocalAI.Reranker/LocalAI.Reranker.csproj \
+            --configuration Release \
+            --output ./artifacts \
+            -p:PackageVersion=${{ steps.version.outputs.VERSION }}
+
+      - name: Push to NuGet
+        run: |
+          for package in ./artifacts/*.nupkg; do
+            dotnet nuget push "$package" \
+              --api-key ${{ secrets.NUGET_API_KEY }} \
+              --source https://api.nuget.org/v3/index.json \
+              --skip-duplicate
+          done
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: ./artifacts/*.nupkg
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
