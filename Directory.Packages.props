@@ -11,6 +11,9 @@
     <PackageVersion Include="Microsoft.ML.Tokenizers" Version="2.0.0" />
     <PackageVersion Include="System.Numerics.Tensors" Version="10.0.1" />
 
+    <!-- Vision Dependencies -->
+    <PackageVersion Include="SixLabors.ImageSharp" Version="3.1.12" />
+
     <!-- ONNX Runtime GenAI for LLM Inference -->
     <PackageVersion Include="Microsoft.ML.OnnxRuntimeGenAI" Version="0.11.3" />
     <PackageVersion Include="Microsoft.ML.OnnxRuntimeGenAI.Cuda" Version="0.11.3" />
