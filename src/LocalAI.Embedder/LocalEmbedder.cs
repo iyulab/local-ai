@@ -1,7 +1,7 @@
 using LocalAI.Embedder.Inference;
 using LocalAI.Embedder.Pooling;
-using LocalAI.Embedder.Tokenization;
 using LocalAI.Embedder.Utils;
+using LocalAI.Text;
 
 namespace LocalAI.Embedder;
 
@@ -104,8 +104,9 @@ public static class LocalEmbedder
         if (!File.Exists(vocabPath))
             throw new ModelNotFoundException("Vocabulary file not found", vocabPath);
 
-        // Load tokenizer
-        var tokenizer = await BertTokenizer.CreateFromVocabAsync(vocabPath, options.DoLowerCase);
+        // Load tokenizer using Text.Core
+        var tokenizerDir = Path.GetDirectoryName(vocabPath)!;
+        var tokenizer = await TokenizerFactory.CreateWordPieceAsync(tokenizerDir, options.MaxSequenceLength);
 
         // Load inference engine
         var engine = OnnxInferenceEngine.Create(modelPath, options.Provider);

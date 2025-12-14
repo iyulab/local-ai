@@ -1,6 +1,7 @@
 using LocalAI.Download;
 using LocalAI.Inference;
 using LocalAI.Reranker.Models;
+using LocalAI.Text;
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
 
@@ -148,10 +149,10 @@ internal sealed class CrossEncoderInference : IDisposable
     /// </summary>
     /// <param name="batch">Encoded batch of query-document pairs.</param>
     /// <returns>Array of relevance scores (0-1).</returns>
-    public float[] Infer(EncodedBatch batch)
+    public float[] Infer(EncodedPairBatch batch)
     {
-        var inputIds = CreateTensor(batch.InputIds, batch.BatchSize, batch.SequenceLength);
-        var attentionMask = CreateTensor(batch.AttentionMask, batch.BatchSize, batch.SequenceLength);
+        var inputIds = CreateTensor(batch.GetFlatInputIds(), batch.BatchSize, batch.SequenceLength);
+        var attentionMask = CreateTensor(batch.GetFlatAttentionMask(), batch.BatchSize, batch.SequenceLength);
 
         var inputs = new List<NamedOnnxValue>
         {
@@ -161,7 +162,7 @@ internal sealed class CrossEncoderInference : IDisposable
 
         if (_hasTokenTypeIds)
         {
-            var tokenTypeIds = CreateTensor(batch.TokenTypeIds, batch.BatchSize, batch.SequenceLength);
+            var tokenTypeIds = CreateTensor(batch.GetFlatTokenTypeIds(), batch.BatchSize, batch.SequenceLength);
             inputs.Add(NamedOnnxValue.CreateFromTensor("token_type_ids", tokenTypeIds));
         }
 
@@ -183,7 +184,7 @@ internal sealed class CrossEncoderInference : IDisposable
     /// </summary>
     /// <param name="encoded">Encoded input.</param>
     /// <returns>Relevance score (0-1).</returns>
-    public float InferSingle(EncodedInput encoded)
+    public float InferSingle(EncodedPair encoded)
     {
         var inputIds = CreateTensor(encoded.InputIds, 1, encoded.InputIds.Length);
         var attentionMask = CreateTensor(encoded.AttentionMask, 1, encoded.AttentionMask.Length);

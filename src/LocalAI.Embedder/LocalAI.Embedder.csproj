@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\LocalAI.Core\LocalAI.Core.csproj" />
+    <ProjectReference Include="..\LocalAI.Text.Core\LocalAI.Text.Core.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,8 +1,8 @@
 using System.Buffers;
 using LocalAI.Embedder.Inference;
 using LocalAI.Embedder.Pooling;
-using LocalAI.Embedder.Tokenization;
 using LocalAI.Embedder.Utils;
+using LocalAI.Text;
 
 namespace LocalAI.Embedder;
 
@@ -12,7 +12,7 @@ namespace LocalAI.Embedder;
 internal sealed class EmbeddingModel : IEmbeddingModel
 {
     private readonly OnnxInferenceEngine _engine;
-    private readonly ITokenizer _tokenizer;
+    private readonly ISequenceTokenizer _tokenizer;
     private readonly IPoolingStrategy _poolingStrategy;
     private readonly EmbedderOptions _options;
     private readonly ModelInfo? _modelInfo;
@@ -25,7 +25,7 @@ internal sealed class EmbeddingModel : IEmbeddingModel
     internal EmbeddingModel(
         string modelId,
         OnnxInferenceEngine engine,
-        ITokenizer tokenizer,
+        ISequenceTokenizer tokenizer,
         IPoolingStrategy poolingStrategy,
         EmbedderOptions options,
         ModelInfo? modelInfo = null)
@@ -43,20 +43,20 @@ internal sealed class EmbeddingModel : IEmbeddingModel
         ObjectDisposedException.ThrowIf(_disposed, this);
 
         // Tokenize
-        var (inputIds, attentionMask) = _tokenizer.Encode(text, _options.MaxSequenceLength);
+        var encoded = _tokenizer.EncodeSequence(text, _options.MaxSequenceLength);
 
         // Run inference
         var tokenEmbeddings = await Task.Run(
-            () => _engine.RunInference(inputIds, attentionMask),
+            () => _engine.RunInference(encoded.InputIds, encoded.AttentionMask),
             cancellationToken);
 
         // Pool to sentence embedding using pooled buffer
-        int seqLength = inputIds.Length;
+        int seqLength = encoded.InputIds.Length;
         var result = new float[Dimensions];
 
         _poolingStrategy.Pool(
             tokenEmbeddings.AsSpan(),
-            attentionMask.AsSpan(),
+            encoded.AttentionMask.AsSpan(),
             result.AsSpan(),
             seqLength,
             Dimensions);
@@ -78,7 +78,11 @@ internal sealed class EmbeddingModel : IEmbeddingModel
             return [];
 
         // Tokenize all texts
-        var (allInputIds, allAttentionMasks) = _tokenizer.EncodeBatch(texts, _options.MaxSequenceLength);
+        var encodedBatch = _tokenizer.EncodeBatch(texts, _options.MaxSequenceLength);
+
+        // Get jagged arrays for batch inference
+        var allInputIds = encodedBatch.GetInputIdsJagged();
+        var allAttentionMasks = encodedBatch.GetAttentionMasksJagged();
 
         // Run batch inference with parallelization
         var allTokenEmbeddings = await Task.Run(
@@ -87,7 +91,7 @@ internal sealed class EmbeddingModel : IEmbeddingModel
 
         // Pool each to sentence embedding with parallel processing
         var results = new float[texts.Count][];
-        int seqLength = _options.MaxSequenceLength;
+        int seqLength = encodedBatch.SequenceLength;
         int hiddenDim = Dimensions;
         bool normalize = _options.NormalizeEmbeddings;
 

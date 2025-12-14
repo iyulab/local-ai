@@ -1,3 +1,4 @@
+using LocalAI.Text;
 using Microsoft.ML.Tokenizers;
 
 namespace LocalAI.Translator.Tokenization;
@@ -167,138 +168,16 @@ internal sealed class TranslatorTokenizer : IDisposable
 
     private static Dictionary<string, int> LoadVocabulary(string modelDir)
     {
-        var vocab = new Dictionary<string, int>(StringComparer.Ordinal);
-
-        // Try vocab.json first (standard format)
-        var vocabJsonPath = Path.Combine(modelDir, "vocab.json");
-        if (File.Exists(vocabJsonPath))
+        try
         {
-            var json = File.ReadAllText(vocabJsonPath);
-            vocab = ParseVocabJson(json);
+            // Use centralized VocabularyLoader from Text.Core
+            return VocabularyLoader.LoadFromModelDirectoryAsync(modelDir).GetAwaiter().GetResult();
         }
-
-        // Try tokenizer.json (HuggingFace format)
-        if (vocab.Count == 0)
+        catch (FileNotFoundException)
         {
-            var tokenizerJsonPath = Path.Combine(modelDir, "tokenizer.json");
-            if (File.Exists(tokenizerJsonPath))
-            {
-                var json = File.ReadAllText(tokenizerJsonPath);
-                vocab = ParseTokenizerJson(json);
-            }
+            // Create minimal vocabulary if none found
+            return CreateMinimalVocabulary();
         }
-
-        // Create minimal vocabulary if none found
-        if (vocab.Count == 0)
-        {
-            vocab = CreateMinimalVocabulary();
-        }
-
-        return vocab;
-    }
-
-    private static Dictionary<string, int> ParseVocabJson(string json)
-    {
-        var vocab = new Dictionary<string, int>(StringComparer.Ordinal);
-
-        // Simple JSON parsing for vocab format: {"token": id, ...}
-        var cleanJson = json.Trim();
-        if (!cleanJson.StartsWith("{") || !cleanJson.EndsWith("}"))
-            return vocab;
-
-        cleanJson = cleanJson[1..^1]; // Remove { and }
-
-        foreach (var entry in SplitJsonEntries(cleanJson))
-        {
-            var parts = entry.Split(':', 2);
-            if (parts.Length != 2) continue;
-
-            var token = parts[0].Trim().Trim('"');
-            if (int.TryParse(parts[1].Trim(), out var id))
-            {
-                vocab[token] = id;
-            }
-        }
-
-        return vocab;
-    }
-
-    private static Dictionary<string, int> ParseTokenizerJson(string json)
-    {
-        // Simplified parsing for tokenizer.json - look for "vocab" section
-        var vocab = new Dictionary<string, int>(StringComparer.Ordinal);
-
-        var vocabIndex = json.IndexOf("\"vocab\"", StringComparison.Ordinal);
-        if (vocabIndex < 0)
-            return vocab;
-
-        var startBrace = json.IndexOf('{', vocabIndex);
-        if (startBrace < 0)
-            return vocab;
-
-        var braceCount = 1;
-        var endBrace = startBrace + 1;
-
-        while (braceCount > 0 && endBrace < json.Length)
-        {
-            if (json[endBrace] == '{') braceCount++;
-            else if (json[endBrace] == '}') braceCount--;
-            endBrace++;
-        }
-
-        var vocabJson = json.Substring(startBrace, endBrace - startBrace);
-        return ParseVocabJson(vocabJson);
-    }
-
-    private static IEnumerable<string> SplitJsonEntries(string json)
-    {
-        var entries = new List<string>();
-        var current = new System.Text.StringBuilder();
-        var inString = false;
-        var escape = false;
-
-        foreach (var c in json)
-        {
-            if (escape)
-            {
-                current.Append(c);
-                escape = false;
-                continue;
-            }
-
-            if (c == '\\')
-            {
-                current.Append(c);
-                escape = true;
-                continue;
-            }
-
-            if (c == '"')
-            {
-                inString = !inString;
-                current.Append(c);
-                continue;
-            }
-
-            if (c == ',' && !inString)
-            {
-                if (current.Length > 0)
-                {
-                    entries.Add(current.ToString().Trim());
-                    current.Clear();
-                }
-                continue;
-            }
-
-            current.Append(c);
-        }
-
-        if (current.Length > 0)
-        {
-            entries.Add(current.ToString().Trim());
-        }
-
-        return entries;
     }
 
     private static Dictionary<string, int> CreateMinimalVocabulary()

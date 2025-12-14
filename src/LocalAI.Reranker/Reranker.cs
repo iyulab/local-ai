@@ -1,6 +1,7 @@
 using LocalAI.Reranker.Core;
 using LocalAI.Reranker.Infrastructure;
 using LocalAI.Reranker.Models;
+using LocalAI.Text;
 
 namespace LocalAI.Reranker;
 
@@ -154,7 +155,7 @@ public sealed class Reranker : IRerankerModel
                 .Take(Math.Min(batchSize, documents.Count - offset))
                 .ToList();
 
-            var batch = state.Tokenizer.EncodeBatch(query, batchDocs);
+            var batch = state.Tokenizer.EncodePairBatch(query, batchDocs);
             var scores = state.Inference.Infer(batch);
 
             Array.Copy(scores, 0, allScores, offset, scores.Length);
@@ -181,8 +182,9 @@ public sealed class Reranker : IRerankerModel
             // Determine max sequence length
             var maxLength = _options.MaxSequenceLength ?? modelInfo.MaxSequenceLength;
 
-            // Initialize tokenizer
-            var tokenizer = TokenizerWrapper.FromFile(modelPaths.TokenizerPath, maxLength);
+            // Initialize tokenizer using Text.Core
+            var modelDir = Path.GetDirectoryName(modelPaths.TokenizerPath)!;
+            var tokenizer = await TokenizerFactory.CreateWordPiecePairAsync(modelDir, maxLength);
 
             // Initialize inference engine
             var inference = CrossEncoderInference.Create(
@@ -261,6 +263,6 @@ public sealed class Reranker : IRerankerModel
     /// </summary>
     private sealed record RerankerState(
         ModelInfo ModelInfo,
-        TokenizerWrapper Tokenizer,
+        IPairTokenizer Tokenizer,
         CrossEncoderInference Inference);
 }

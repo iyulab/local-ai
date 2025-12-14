@@ -1,7 +1,7 @@
 using LocalAI.Captioner.Models;
-using LocalAI.Captioner.Tokenization;
 using LocalAI.Exceptions;
 using LocalAI.Inference;
+using LocalAI.Text;
 using LocalAI.Vision;
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
@@ -15,7 +15,7 @@ internal sealed class VitGpt2Captioner : ICaptioner
 {
     private readonly InferenceSession _encoder;
     private readonly InferenceSession _decoder;
-    private readonly ITokenizerWrapper _tokenizer;
+    private readonly ITextTokenizer _tokenizer;
     private readonly ModelInfo _modelInfo;
     private readonly CaptionerOptions _options;
     private readonly ImagePreprocessor _preprocessor;
@@ -24,7 +24,7 @@ internal sealed class VitGpt2Captioner : ICaptioner
     private VitGpt2Captioner(
         InferenceSession encoder,
         InferenceSession decoder,
-        ITokenizerWrapper tokenizer,
+        ITextTokenizer tokenizer,
         ModelInfo modelInfo,
         CaptionerOptions options)
     {
@@ -62,8 +62,8 @@ internal sealed class VitGpt2Captioner : ICaptioner
         var encoder = await OnnxSessionFactory.CreateAsync(encoderPath, options.Provider).ConfigureAwait(false);
         var decoder = await OnnxSessionFactory.CreateAsync(decoderPath, options.Provider).ConfigureAwait(false);
 
-        // Load tokenizer
-        var tokenizer = await TokenizerFactory.CreateAsync(modelDir, modelInfo.TokenizerType).ConfigureAwait(false);
+        // Load tokenizer from Text.Core
+        var tokenizer = Text.TokenizerFactory.CreateGpt2(modelDir);
 
         return new VitGpt2Captioner(encoder, decoder, tokenizer, modelInfo, options);
     }
@@ -120,8 +120,8 @@ internal sealed class VitGpt2Captioner : ICaptioner
         var (tokenIds, confidence) = await Task.Run(
             () => GenerateTokens(imageEmbeddings, cancellationToken), cancellationToken).ConfigureAwait(false);
 
-        // Decode tokens to text
-        var caption = _tokenizer.Decode(tokenIds);
+        // Decode tokens to text, skipping special tokens
+        var caption = _tokenizer.Decode(tokenIds, skipSpecialTokens: true);
 
         return new CaptionResult(caption, confidence);
     }
