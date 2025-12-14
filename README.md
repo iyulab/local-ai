@@ -1,11 +1,11 @@
 # LocalAI
 
 [![CI](https://github.com/iyulab/local-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/iyulab/local-ai/actions/workflows/ci.yml)
-[![NuGet](https://img.shields.io/nuget/v/LocalAI.Embedder.svg)](https://www.nuget.org/packages/LocalAI.Embedder)
-[![NuGet](https://img.shields.io/nuget/v/LocalAI.Reranker.svg)](https://www.nuget.org/packages/LocalAI.Reranker)
-[![NuGet](https://img.shields.io/nuget/v/LocalAI.Generator.svg)](https://www.nuget.org/packages/LocalAI.Generator)
-[![NuGet](https://img.shields.io/nuget/v/LocalAI.Captioner.svg)](https://www.nuget.org/packages/LocalAI.Captioner)
-[![NuGet](https://img.shields.io/nuget/v/LocalAI.Ocr.svg)](https://www.nuget.org/packages/LocalAI.Ocr)
+[![Embedder](https://img.shields.io/nuget/v/LocalAI.Embedder.svg)](https://www.nuget.org/packages/LocalAI.Embedder)
+[![Reranker](https://img.shields.io/nuget/v/LocalAI.Reranker.svg)](https://www.nuget.org/packages/LocalAI.Reranker)
+[![Generator](https://img.shields.io/nuget/v/LocalAI.Generator.svg)](https://www.nuget.org/packages/LocalAI.Generator)
+[![Captioner](https://img.shields.io/nuget/v/LocalAI.Captioner.svg)](https://www.nuget.org/packages/LocalAI.Captioner)
+[![Ocr](https://img.shields.io/nuget/v/LocalAI.Ocr.svg)](https://www.nuget.org/packages/LocalAI.Ocr)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ## Philosophy
@@ -62,8 +62,8 @@ float[] embedding = await model.EmbedAsync("Hello, world!");
 | [LocalAI.Captioner](docs/captioner.md) | Image → Text captioning | [![NuGet](https://img.shields.io/nuget/v/LocalAI.Captioner.svg)](https://www.nuget.org/packages/LocalAI.Captioner) |
 | [LocalAI.Ocr](docs/ocr.md) | Document OCR | [![NuGet](https://img.shields.io/nuget/v/LocalAI.Ocr.svg)](https://www.nuget.org/packages/LocalAI.Ocr) |
 | LocalAI.Detector | Object detection | 📋 Planned |
-| LocalAI.Translator | Neural machine translation | 📋 Planned |
 | LocalAI.Segmenter | Image segmentation | 📋 Planned |
+| LocalAI.Translator | Neural machine translation | 📋 Planned |
 | LocalAI.Transcriber | Speech → Text (Whisper) | 📋 Planned |
 | LocalAI.Synthesizer | Text → Speech | 📋 Planned |
 

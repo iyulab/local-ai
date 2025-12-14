@@ -79,6 +79,49 @@ public record PreprocessProfile(
         Mean: [0.5f, 0.5f, 0.5f],
         Std: [0.5f, 0.5f, 0.5f],
         ResizeMode: ResizeMode.Stretch);
+
+    /// <summary>
+    /// RT-DETR object detection model profile (640x640).
+    /// Uses ImageNet normalization.
+    /// </summary>
+    public static PreprocessProfile RtDetr { get; } = new(
+        Width: 640,
+        Height: 640,
+        Mean: [0.485f, 0.456f, 0.406f],
+        Std: [0.229f, 0.224f, 0.225f],
+        ResizeMode: ResizeMode.Stretch);
+
+    /// <summary>
+    /// EfficientDet object detection model profile (512x512).
+    /// Uses ImageNet normalization.
+    /// </summary>
+    public static PreprocessProfile EfficientDet { get; } = new(
+        Width: 512,
+        Height: 512,
+        Mean: [0.485f, 0.456f, 0.406f],
+        Std: [0.229f, 0.224f, 0.225f],
+        ResizeMode: ResizeMode.Stretch);
+
+    /// <summary>
+    /// SegFormer semantic segmentation model profile (512x512).
+    /// Uses ImageNet normalization.
+    /// </summary>
+    public static PreprocessProfile SegFormer { get; } = new(
+        Width: 512,
+        Height: 512,
+        Mean: [0.485f, 0.456f, 0.406f],
+        Std: [0.229f, 0.224f, 0.225f],
+        ResizeMode: ResizeMode.Stretch);
+
+    /// <summary>
+    /// SegFormer ADE20K profile with standard 512x512 input.
+    /// </summary>
+    public static PreprocessProfile SegFormerAde20k { get; } = new(
+        Width: 512,
+        Height: 512,
+        Mean: [0.485f, 0.456f, 0.406f],
+        Std: [0.229f, 0.224f, 0.225f],
+        ResizeMode: ResizeMode.Stretch);
 }
 
 /// <summary>
