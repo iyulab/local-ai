@@ -11,6 +11,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\LocalAI.Core\LocalAI.Core.csproj" />
     <ProjectReference Include="..\LocalAI.Text.Core\LocalAI.Text.Core.csproj" />
   </ItemGroup>
