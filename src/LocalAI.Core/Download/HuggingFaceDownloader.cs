@@ -15,6 +15,7 @@ public sealed class HuggingFaceDownloader : IDisposable
 
     private const string HuggingFaceBaseUrl = "https://huggingface.co";
     private const int BufferSize = 81920; // 80KB
+    private const int MaxRetries = 3;
 
     /// <summary>
     /// Gets the cache directory being used.
@@ -76,22 +77,101 @@ public sealed class HuggingFaceDownloader : IDisposable
             var localPath = Path.Combine(modelDir, file);
             if (!File.Exists(localPath) || CacheManager.IsLfsPointerFile(localPath))
             {
-                try
+                var downloaded = await TryDownloadFileWithFallbackAsync(
+                    repoId, file, localPath, revision, subfolder,
+                    progress, cancellationToken);
+
+                if (!downloaded && IsCriticalFile(file))
                 {
-                    await DownloadFileAsync(
-                        repoId, file, localPath, revision, subfolder,
-                        progress, cancellationToken);
-                }
-                catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
-                {
-                    // Optional file not found, skip (except for critical files)
-                    if (IsCriticalFile(file))
-                        throw new ModelDownloadException($"Required file '{file}' not found in repository '{repoId}'.", repoId, ex);
+                    var location = string.IsNullOrEmpty(subfolder) ? "root" : $"'{subfolder}/' and root";
+                    throw new ModelDownloadException(
+                        $"Required file '{file}' not found in repository '{repoId}' (searched in {location}).",
+                        repoId);
                 }
             }
         }
 
         return modelDir;
+    }
+
+    /// <summary>
+    /// Attempts to download a file, with fallback to root directory for tokenizer files.
+    /// </summary>
+    /// <returns>True if the file was downloaded successfully, false if not found.</returns>
+    private async Task<bool> TryDownloadFileWithFallbackAsync(
+        string repoId,
+        string filename,
+        string localPath,
+        string revision,
+        string? subfolder,
+        IProgress<DownloadProgress>? progress,
+        CancellationToken cancellationToken)
+    {
+        // First, try downloading from the specified location (subfolder or root)
+        try
+        {
+            await DownloadFileWithRetryAsync(repoId, filename, localPath, revision, subfolder, progress, cancellationToken);
+            return true;
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+        {
+            // If subfolder is specified and this is a tokenizer/config file, try root
+            if (!string.IsNullOrEmpty(subfolder) && IsTokenizerOrConfigFile(filename))
+            {
+                try
+                {
+                    await DownloadFileWithRetryAsync(repoId, filename, localPath, revision, subfolder: null, progress, cancellationToken);
+                    return true;
+                }
+                catch (HttpRequestException rootEx) when (rootEx.StatusCode == HttpStatusCode.NotFound)
+                {
+                    // Not found in root either
+                    return false;
+                }
+            }
+
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Downloads a file with automatic retry on transient failures.
+    /// </summary>
+    private async Task DownloadFileWithRetryAsync(
+        string repoId,
+        string filename,
+        string destinationPath,
+        string revision,
+        string? subfolder,
+        IProgress<DownloadProgress>? progress,
+        CancellationToken cancellationToken)
+    {
+        Exception? lastException = null;
+
+        for (var attempt = 1; attempt <= MaxRetries; attempt++)
+        {
+            try
+            {
+                await DownloadFileAsync(repoId, filename, destinationPath, revision, subfolder, progress, cancellationToken);
+                return;
+            }
+            catch (HttpRequestException ex) when (IsTransientError(ex) && attempt < MaxRetries)
+            {
+                lastException = ex;
+                var delay = TimeSpan.FromSeconds(Math.Pow(2, attempt)); // Exponential backoff
+                await Task.Delay(delay, cancellationToken);
+            }
+            catch (TaskCanceledException ex) when (!cancellationToken.IsCancellationRequested && attempt < MaxRetries)
+            {
+                // Timeout, not user cancellation
+                lastException = ex;
+                var delay = TimeSpan.FromSeconds(Math.Pow(2, attempt));
+                await Task.Delay(delay, cancellationToken);
+            }
+        }
+
+        // If we get here, all retries failed
+        throw lastException ?? new InvalidOperationException("Download failed after retries");
     }
 
     /// <summary>
@@ -227,6 +307,8 @@ public sealed class HuggingFaceDownloader : IDisposable
             "model.onnx",
             "config.json",
             "vocab.txt",
+            "vocab.json",
+            "merges.txt",
             "tokenizer.json",
             "tokenizer_config.json",
             "special_tokens_map.json"
@@ -236,6 +318,35 @@ public sealed class HuggingFaceDownloader : IDisposable
     private static bool IsCriticalFile(string filename)
     {
         return filename.Equals("model.onnx", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Checks if a file is a tokenizer or config file that may be located in the root
+    /// even when the model files are in a subfolder.
+    /// </summary>
+    private static bool IsTokenizerOrConfigFile(string filename)
+    {
+        return filename.Equals("vocab.txt", StringComparison.OrdinalIgnoreCase) ||
+               filename.Equals("vocab.json", StringComparison.OrdinalIgnoreCase) ||
+               filename.Equals("merges.txt", StringComparison.OrdinalIgnoreCase) ||
+               filename.Equals("tokenizer.json", StringComparison.OrdinalIgnoreCase) ||
+               filename.Equals("tokenizer_config.json", StringComparison.OrdinalIgnoreCase) ||
+               filename.Equals("special_tokens_map.json", StringComparison.OrdinalIgnoreCase) ||
+               filename.Equals("config.json", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Determines if an HTTP error is transient and should be retried.
+    /// </summary>
+    private static bool IsTransientError(HttpRequestException ex)
+    {
+        return ex.StatusCode is
+            HttpStatusCode.RequestTimeout or
+            HttpStatusCode.TooManyRequests or
+            HttpStatusCode.InternalServerError or
+            HttpStatusCode.BadGateway or
+            HttpStatusCode.ServiceUnavailable or
+            HttpStatusCode.GatewayTimeout;
     }
 
     public void Dispose()
