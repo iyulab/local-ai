@@ -45,14 +45,32 @@ foreach (var region in result.Regions)
 
 ## Language-Specific OCR
 
+### Korean OCR
+
 ```csharp
 // Load OCR for Korean text
 await using var ocr = await LocalOcr.LoadForLanguageAsync("ko");
 
+var result = await ocr.RecognizeAsync("korean_document.png");
+Console.WriteLine(result.FullText);
+
+// Korean + English mixed documents work with the Korean model
+// The CRNN model recognizes both Hangul and Latin characters
+```
+
+### Other Languages
+
+```csharp
+// Japanese
+await using var ocr = await LocalOcr.LoadForLanguageAsync("ja");
+
+// Chinese
+await using var ocr = await LocalOcr.LoadForLanguageAsync("zh");
+
 // Or specify the recognition model explicitly
 await using var ocr = await LocalOcr.LoadAsync(
     detectionModel: "default",
-    recognitionModel: "crnn-korean-v3");
+    recognitionModel: "crnn-japan-v3");
 ```
 
 ## Available Models

@@ -55,6 +55,50 @@ You can also use any HuggingFace sentence-transformers model by its full ID:
 var model = await LocalEmbedder.LoadAsync("sentence-transformers/all-MiniLM-L12-v2");
 ```
 
+## Multilingual Support (Korean, Japanese, Chinese, etc.)
+
+For non-English text, use the `multilingual` model which supports 50+ languages including Korean, Japanese, and Chinese:
+
+```csharp
+// Load multilingual model
+await using var model = await LocalEmbedder.LoadAsync("multilingual");
+
+// Korean text embedding
+float[] koreanEmbedding = await model.EmbedAsync("안녕하세요, 세계!");
+
+// Japanese text embedding
+float[] japaneseEmbedding = await model.EmbedAsync("こんにちは、世界！");
+
+// Chinese text embedding
+float[] chineseEmbedding = await model.EmbedAsync("你好，世界！");
+
+// Cross-lingual similarity works!
+float similarity = model.CosineSimilarity(koreanEmbedding, japaneseEmbedding);
+```
+
+### Multilingual Semantic Search
+
+```csharp
+await using var model = await LocalEmbedder.LoadAsync("multilingual");
+
+// Index Korean documents
+var documents = new[]
+{
+    "머신러닝은 인공지능의 하위 분야입니다",
+    "오늘 날씨가 맑고 따뜻합니다",
+    "딥러닝은 신경망을 사용합니다"
+};
+
+float[][] docEmbeddings = await model.EmbedBatchAsync(documents);
+
+// Search in Korean
+float[] queryEmbedding = await model.EmbedAsync("AI란 무엇인가요?");
+
+var results = documents
+    .Select((doc, i) => new { Document = doc, Score = model.CosineSimilarity(queryEmbedding, docEmbeddings[i]) })
+    .OrderByDescending(x => x.Score);
+```
+
 ## Configuration Options
 
 ```csharp
