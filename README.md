@@ -1,12 +1,11 @@
 # LMSupply
-> Local Model Supply
+
+**Local Model Supply for .NET — on-demand AI inference**
 
 [![CI](https://github.com/iyulab/lm-supply/actions/workflows/ci.yml/badge.svg)](https://github.com/iyulab/lm-supply/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-## Philosophy
-
-**Start small. Download what you need. Run locally.**
+> Start small. Download what you need. Run locally.
 
 ```csharp
 // This is all you need. No setup. No configuration. No API keys.
