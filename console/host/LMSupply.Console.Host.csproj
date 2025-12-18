@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>preview</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>LMSupply.Console.Host</RootNamespace>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- LMSupply References -->
+    <ProjectReference Include="..\..\src\LMSupply.Core\LMSupply.Core.csproj" />
+    <ProjectReference Include="..\..\src\LMSupply.Generator\LMSupply.Generator.csproj" />
+    <ProjectReference Include="..\..\src\LMSupply.Embedder\LMSupply.Embedder.csproj" />
+    <ProjectReference Include="..\..\src\LMSupply.Reranker\LMSupply.Reranker.csproj" />
+    <ProjectReference Include="..\..\src\LMSupply.Transcriber\LMSupply.Transcriber.csproj" />
+    <ProjectReference Include="..\..\src\LMSupply.Synthesizer\LMSupply.Synthesizer.csproj" />
+    <ProjectReference Include="..\..\src\LMSupply.Captioner\LMSupply.Captioner.csproj" />
+    <ProjectReference Include="..\..\src\LMSupply.Ocr\LMSupply.Ocr.csproj" />
+    <ProjectReference Include="..\..\src\LMSupply.Detector\LMSupply.Detector.csproj" />
+    <ProjectReference Include="..\..\src\LMSupply.Segmenter\LMSupply.Segmenter.csproj" />
+    <ProjectReference Include="..\..\src\LMSupply.Translator\LMSupply.Translator.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- OpenAPI/Swagger -->
+    <PackageReference Include="Swashbuckle.AspNetCore" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+  </ItemGroup>
+
+</Project>

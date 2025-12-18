@@ -166,9 +166,10 @@ internal sealed class OnnxGeneratorModel : IGeneratorModel
     public Task WarmupAsync(CancellationToken cancellationToken = default)
     {
         // Perform a minimal generation to warm up the model
+        // Note: MaxTokens must be > 1 for DirectML compatibility (shape mismatch bug with MaxTokens=1)
         return GenerateCompleteAsync(
-            "Hello",
-            new GenerationOptions { MaxTokens = 1 },
+            "Hi",
+            new GenerationOptions { MaxTokens = 5 },
             cancellationToken);
     }
 

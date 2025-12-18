@@ -95,7 +95,8 @@ public static class CacheManager
     /// <summary>
     /// Deletes a cached model.
     /// </summary>
-    public static void DeleteModel(string cacheDir, string repoId)
+    /// <returns>True if the model was found and deleted, false if it didn't exist.</returns>
+    public static bool DeleteModel(string cacheDir, string repoId)
     {
         var sanitizedRepoId = repoId.Replace("/", "--");
         var modelDir = Path.Combine(cacheDir, $"models--{sanitizedRepoId}");
@@ -103,7 +104,10 @@ public static class CacheManager
         if (Directory.Exists(modelDir))
         {
             Directory.Delete(modelDir, recursive: true);
+            return true;
         }
+
+        return false;
     }
 
     /// <summary>
@@ -130,5 +134,177 @@ public static class CacheManager
                 yield return (modelId, revision);
             }
         }
+    }
+
+    /// <summary>
+    /// Gets detailed information about all cached models.
+    /// </summary>
+    /// <param name="cacheDir">The cache directory path.</param>
+    /// <returns>List of cached model information.</returns>
+    public static IReadOnlyList<CachedModelInfo> GetCachedModelsWithInfo(string cacheDir)
+    {
+        var models = new List<CachedModelInfo>();
+
+        if (!Directory.Exists(cacheDir))
+            return models;
+
+        foreach (var modelDir in Directory.EnumerateDirectories(cacheDir, "models--*"))
+        {
+            var dirName = Path.GetFileName(modelDir);
+            var parts = dirName.Split("--");
+
+            if (parts.Length >= 3)
+            {
+                var org = parts[1];
+                var name = string.Join("/", parts.Skip(2));
+                var repoId = $"{org}/{name}";
+
+                var info = GetModelInfoInternal(modelDir, repoId);
+                if (info != null)
+                {
+                    models.Add(info);
+                }
+            }
+        }
+
+        return models.OrderBy(m => m.RepoId).ToList();
+    }
+
+    /// <summary>
+    /// Gets cached models filtered by type (excludes incomplete models).
+    /// </summary>
+    /// <param name="cacheDir">The cache directory path.</param>
+    /// <param name="type">The model type to filter by.</param>
+    /// <returns>List of complete cached models of the specified type.</returns>
+    public static IReadOnlyList<CachedModelInfo> GetCachedModelsByType(string cacheDir, ModelType type)
+    {
+        return GetCachedModelsWithInfo(cacheDir)
+            .Where(m => m.DetectedType == type && m.IsComplete)
+            .ToList();
+    }
+
+    /// <summary>
+    /// Gets the total size of all cached models.
+    /// </summary>
+    public static long GetTotalCacheSize(string cacheDir)
+    {
+        if (!Directory.Exists(cacheDir))
+            return 0;
+
+        return Directory.EnumerateFiles(cacheDir, "*", SearchOption.AllDirectories)
+            .Sum(f => new FileInfo(f).Length);
+    }
+
+    private static CachedModelInfo? GetModelInfoInternal(string modelDir, string repoId)
+    {
+        try
+        {
+            var snapshotsDir = Path.Combine(modelDir, "snapshots");
+            if (!Directory.Exists(snapshotsDir))
+                return null;
+
+            // Get the most recent snapshot
+            var latestSnapshot = Directory.GetDirectories(snapshotsDir)
+                .OrderByDescending(Directory.GetLastWriteTime)
+                .FirstOrDefault();
+
+            if (latestSnapshot == null)
+                return null;
+
+            // Calculate file list and total size
+            var files = Directory.GetFiles(latestSnapshot, "*", SearchOption.AllDirectories);
+            var totalSize = files.Sum(f => new FileInfo(f).Length);
+            var fileNames = files.Select(Path.GetFileName).Where(n => n != null).ToList();
+
+            // Detect model type
+            var detectedType = DetectModelType(fileNames!, repoId);
+
+            return new CachedModelInfo
+            {
+                RepoId = repoId,
+                LocalPath = latestSnapshot,
+                SizeBytes = totalSize,
+                FileCount = files.Length,
+                DetectedType = detectedType,
+                LastModified = Directory.GetLastWriteTime(latestSnapshot),
+                Files = fileNames!
+            };
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Detects the model type based on file patterns and repository ID.
+    /// </summary>
+    /// <param name="files">List of file names in the model directory.</param>
+    /// <param name="repoId">The HuggingFace repository ID.</param>
+    /// <returns>The detected model type.</returns>
+    public static ModelType DetectModelType(IReadOnlyList<string> files, string repoId)
+    {
+        var fileSet = new HashSet<string>(files, StringComparer.OrdinalIgnoreCase);
+        var repoLower = repoId.ToLowerInvariant();
+
+        // 1. RepoId-based pattern matching (highest confidence)
+
+        // Generator: phi, llama, mistral, qwen, etc. (LLMs)
+        if (repoLower.Contains("phi") || repoLower.Contains("llama") ||
+            repoLower.Contains("mistral") || repoLower.Contains("qwen") ||
+            (repoLower.Contains("gpt") && !repoLower.Contains("gpt2-image")))
+        {
+            if (fileSet.Contains("genai_config.json"))
+                return ModelType.Generator;
+        }
+
+        // Embedder: bge, e5, gte, minilm, mpnet, etc.
+        if (repoLower.Contains("bge-") || repoLower.Contains("/e5-") ||
+            repoLower.Contains("gte-") || repoLower.Contains("minilm") ||
+            repoLower.Contains("mpnet") || repoLower.Contains("sentence-transformers") ||
+            repoLower.Contains("embedding") || repoLower.Contains("embed"))
+            return ModelType.Embedder;
+
+        // Reranker: reranker, cross-encoder
+        if (repoLower.Contains("rerank") || repoLower.Contains("cross-encoder") ||
+            repoLower.Contains("bge-reranker"))
+            return ModelType.Reranker;
+
+        // Transcriber: whisper
+        if (repoLower.Contains("whisper"))
+            return ModelType.Transcriber;
+
+        // Synthesizer: piper, vits, tts
+        if (repoLower.Contains("piper") || repoLower.Contains("vits") ||
+            repoLower.Contains("tts") || repoLower.Contains("speech"))
+            return ModelType.Synthesizer;
+
+        // 2. File pattern-based detection (fallback)
+
+        // Generator: genai_config.json
+        if (fileSet.Contains("genai_config.json"))
+            return ModelType.Generator;
+
+        // Transcriber: encoder + decoder combination
+        if (fileSet.Contains("encoder_model.onnx") && fileSet.Contains("decoder_model.onnx"))
+            return ModelType.Transcriber;
+
+        // Synthesizer: .onnx.json config file
+        if (files.Any(f => f.EndsWith(".onnx.json", StringComparison.OrdinalIgnoreCase)))
+            return ModelType.Synthesizer;
+
+        // Embedder: pooling layer or sentence-transformers structure
+        if (fileSet.Contains("sentence_bert_config.json") ||
+            fileSet.Contains("modules.json") ||
+            files.Any(f => f.Contains("pooling", StringComparison.OrdinalIgnoreCase)))
+            return ModelType.Embedder;
+
+        // Single model.onnx + tokenizer (no decoder) → Embedder
+        if (fileSet.Contains("model.onnx") &&
+            (fileSet.Contains("tokenizer.json") || fileSet.Contains("vocab.txt")) &&
+            !files.Any(f => f.Contains("decoder", StringComparison.OrdinalIgnoreCase)))
+            return ModelType.Embedder;
+
+        return ModelType.Unknown;
     }
 }
