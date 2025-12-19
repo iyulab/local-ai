@@ -10,15 +10,6 @@
     <AssemblyName>lm-supply</AssemblyName>
   </PropertyGroup>
 
-  <!-- Publish Optimization Settings -->
-  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
-    <PublishSingleFile>true</PublishSingleFile>
-    <SelfContained>true</SelfContained>
-    <PublishReadyToRun>true</PublishReadyToRun>
-    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
-    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
-    <DebugType>embedded</DebugType>
-  </PropertyGroup>
 
   <ItemGroup>
     <!-- LMSupply References -->

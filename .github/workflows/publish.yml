@@ -161,6 +161,12 @@ jobs:
           dotnet publish console/host/LMSupply.Console.Host.csproj \
             --configuration Release \
             --runtime ${{ matrix.rid }} \
+            --self-contained true \
+            -p:PublishSingleFile=true \
+            -p:PublishReadyToRun=true \
+            -p:EnableCompressionInSingleFile=true \
+            -p:IncludeNativeLibrariesForSelfExtract=true \
+            -p:DebugType=embedded \
             --output ./publish/${{ matrix.rid }}
 
       - name: Package (Windows)
