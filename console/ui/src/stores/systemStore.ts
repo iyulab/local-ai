@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { SystemStatus, CachedModelInfo, LoadedModelInfo, DownloadProgress } from '../api/types';
+import type { SystemStatus, CachedModelInfo, LoadedModelInfo, DownloadProgress, ModelTypeInfo } from '../api/types';
 import { api } from '../api/client';
 
 export interface DownloadingModel {
@@ -13,12 +13,14 @@ interface SystemState {
   cachedModels: CachedModelInfo[];
   loadedModels: LoadedModelInfo[];
   downloadingModels: Map<string, DownloadingModel>;
+  modelRegistry: ModelTypeInfo[];
   isLoading: boolean;
   error: string | null;
 
   fetchStatus: () => Promise<void>;
   fetchModels: () => Promise<void>;
   fetchLoadedModels: () => Promise<void>;
+  fetchModelRegistry: () => Promise<void>;
   deleteModel: (repoId: string) => Promise<boolean>;
   unloadModel: (key: string) => Promise<boolean>;
   startDownload: (repoId: string) => Promise<void>;
@@ -31,6 +33,7 @@ export const useSystemStore = create<SystemState>((set, get) => ({
   cachedModels: [],
   loadedModels: [],
   downloadingModels: new Map(),
+  modelRegistry: [],
   isLoading: false,
   error: null,
 
@@ -57,6 +60,15 @@ export const useSystemStore = create<SystemState>((set, get) => ({
     try {
       const loadedModels = await api.getLoadedModels();
       set({ loadedModels, error: null });
+    } catch (e) {
+      set({ error: (e as Error).message });
+    }
+  },
+
+  fetchModelRegistry: async () => {
+    try {
+      const response = await api.getModelRegistry();
+      set({ modelRegistry: response.modelTypes, error: null });
     } catch (e) {
       set({ error: (e as Error).message });
     }

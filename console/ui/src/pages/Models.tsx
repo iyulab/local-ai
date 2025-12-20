@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useSystemStore } from '../stores/systemStore';
 import { formatBytes, formatDate } from '../lib/utils';
-import { Trash2, RefreshCw, Power, Download, Search, Loader2 } from 'lucide-react';
+import { Trash2, RefreshCw, Power, Download, Search, Loader2, ChevronDown, ChevronRight, Check } from 'lucide-react';
 import { api } from '../api/client';
 import type { ModelCheckResult } from '../api/types';
 
@@ -10,9 +10,11 @@ export function Models() {
     cachedModels,
     loadedModels,
     downloadingModels,
+    modelRegistry,
     isLoading,
     fetchModels,
     fetchLoadedModels,
+    fetchModelRegistry,
     deleteModel,
     unloadModel,
     startDownload,
@@ -24,6 +26,7 @@ export function Models() {
   const [checkResult, setCheckResult] = useState<ModelCheckResult | null>(null);
   const [isChecking, setIsChecking] = useState(false);
   const [checkError, setCheckError] = useState<string | null>(null);
+  const [expandedTypes, setExpandedTypes] = useState<Set<string>>(new Set());
 
   // Get current download state for the form input
   const currentDownload = downloadingModels.get(repoId);
@@ -34,11 +37,27 @@ export function Models() {
   useEffect(() => {
     fetchModels();
     fetchLoadedModels();
-  }, [fetchModels, fetchLoadedModels]);
+    fetchModelRegistry();
+  }, [fetchModels, fetchLoadedModels, fetchModelRegistry]);
+
+  const toggleExpand = (type: string) => {
+    const newExpanded = new Set(expandedTypes);
+    if (newExpanded.has(type)) {
+      newExpanded.delete(type);
+    } else {
+      newExpanded.add(type);
+    }
+    setExpandedTypes(newExpanded);
+  };
+
+  const handleDownloadFromRegistry = (repoId: string) => {
+    startDownload(repoId);
+  };
 
   const handleRefresh = () => {
     fetchModels();
     fetchLoadedModels();
+    fetchModelRegistry();
   };
 
   const handleDelete = async (repoId: string) => {
@@ -184,6 +203,111 @@ export function Models() {
               <p className="text-destructive">Error: {checkError || downloadError}</p>
             </div>
           )}
+        </div>
+      </div>
+
+      {/* Model Registry - Browse by Type */}
+      <div className="bg-card border border-border rounded-lg p-4">
+        <h2 className="text-lg font-semibold mb-4">
+          Available Models by Type ({modelRegistry.length} types)
+        </h2>
+        <p className="text-sm text-muted-foreground mb-4">
+          Browse available model types and their aliases. Click on a type to expand and see available models.
+        </p>
+        <div className="space-y-2">
+          {modelRegistry.map((typeInfo) => (
+            <div key={typeInfo.type} className="border border-border rounded-lg overflow-hidden">
+              <button
+                onClick={() => toggleExpand(typeInfo.type)}
+                className="w-full flex items-center justify-between p-3 bg-muted hover:bg-muted/80 transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  {expandedTypes.has(typeInfo.type) ? (
+                    <ChevronDown className="w-4 h-4" />
+                  ) : (
+                    <ChevronRight className="w-4 h-4" />
+                  )}
+                  <div className="text-left">
+                    <span className="font-medium">{typeInfo.displayName}</span>
+                    <span className="text-sm text-muted-foreground ml-2">({typeInfo.type})</span>
+                  </div>
+                </div>
+                <span className="text-sm text-muted-foreground">
+                  {typeInfo.models.length} models
+                </span>
+              </button>
+
+              {expandedTypes.has(typeInfo.type) && (
+                <div className="p-3 border-t border-border">
+                  <p className="text-sm text-muted-foreground mb-3">{typeInfo.description}</p>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-border/50 text-left">
+                          <th className="pb-2 font-medium">Alias</th>
+                          <th className="pb-2 font-medium">Repository ID</th>
+                          <th className="pb-2 font-medium">Description</th>
+                          <th className="pb-2 font-medium text-center">Status</th>
+                          <th className="pb-2 font-medium text-center">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {typeInfo.models.map((model) => {
+                          const downloading = checkIsDownloading(model.repoId);
+                          const downloadState = downloadingModels.get(model.repoId);
+                          return (
+                            <tr key={model.alias} className="border-b border-border/30">
+                              <td className="py-2">
+                                <span className="px-2 py-1 bg-primary/10 text-primary rounded text-xs font-medium">
+                                  {model.alias}
+                                </span>
+                              </td>
+                              <td className="py-2">
+                                <code className="text-xs bg-muted px-2 py-1 rounded">
+                                  {model.repoId}
+                                </code>
+                              </td>
+                              <td className="py-2 text-muted-foreground">
+                                {model.description}
+                              </td>
+                              <td className="py-2 text-center">
+                                {model.isCached ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-500/20 text-green-500 rounded text-xs">
+                                    <Check className="w-3 h-3" />
+                                    Cached
+                                  </span>
+                                ) : downloading ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-500/20 text-blue-500 rounded text-xs">
+                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                    {downloadState?.progress?.percentComplete?.toFixed(0) ?? 0}%
+                                  </span>
+                                ) : (
+                                  <span className="px-2 py-1 bg-muted text-muted-foreground rounded text-xs">
+                                    Not downloaded
+                                  </span>
+                                )}
+                              </td>
+                              <td className="py-2 text-center">
+                                {!model.isCached && !downloading && (
+                                  <button
+                                    onClick={() => handleDownloadFromRegistry(model.repoId)}
+                                    className="p-1.5 hover:bg-primary/20 rounded text-primary"
+                                    title={`Download ${model.repoId}`}
+                                  >
+                                    <Download className="w-4 h-4" />
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
         </div>
       </div>
 

@@ -325,3 +325,25 @@ export interface TranslateLanguage {
   source: string;
   target: string;
 }
+
+// ============================================================================
+// Model Registry Types
+// ============================================================================
+
+export interface ModelAliasInfo {
+  alias: string;
+  repoId: string;
+  description: string;
+  isCached: boolean;
+}
+
+export interface ModelTypeInfo {
+  type: string;
+  displayName: string;
+  description: string;
+  models: ModelAliasInfo[];
+}
+
+export interface ModelRegistry {
+  modelTypes: ModelTypeInfo[];
+}

@@ -22,6 +22,8 @@ import type {
   TranslateRequest,
   TranslateResponse,
   TranslateLanguage,
+  ModelRegistry,
+  ModelTypeInfo,
 } from './types';
 
 const API_BASE = '/api';
@@ -416,4 +418,12 @@ export const api = {
     const response = await fetchJson<{ languages: TranslateLanguage[] }>(`${V1_BASE}/translate/languages`);
     return response.languages;
   },
+
+  // ============================================================================
+  // Model Registry Endpoints
+  // ============================================================================
+
+  getModelRegistry: () => fetchJson<ModelRegistry>(`${API_BASE}/registry/models`),
+
+  getModelsByType: (type: string) => fetchJson<ModelTypeInfo>(`${API_BASE}/registry/models/${encodeURIComponent(type)}`),
 };
