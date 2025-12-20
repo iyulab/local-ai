@@ -1,73 +1,112 @@
 using System.Text.Json;
+using LMSupply.Console.Host.Models.OpenAI;
 
 namespace LMSupply.Console.Host.Infrastructure;
 
 /// <summary>
-/// Server-Sent Events 헬퍼
+/// Server-Sent Events helper for OpenAI-compatible streaming
 /// </summary>
 public static class SseHelper
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
     };
 
     /// <summary>
-    /// IAsyncEnumerable을 SSE 스트림으로 전송
+    /// Stream chat completions in OpenAI format
+    /// </summary>
+    public static async Task StreamChatCompletionAsync(
+        HttpContext context,
+        string model,
+        IAsyncEnumerable<string> tokens,
+        CancellationToken cancellationToken = default)
+    {
+        SetSseHeaders(context);
+
+        var id = $"chatcmpl-{Guid.NewGuid():N}";
+        var created = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+
+        // First chunk with role
+        var firstChunk = new ChatCompletionChunk
+        {
+            Id = id,
+            Model = model,
+            Created = created,
+            Choices =
+            [
+                new ChatCompletionChunkChoice
+                {
+                    Index = 0,
+                    Delta = new ChatCompletionDelta { Role = "assistant" }
+                }
+            ]
+        };
+        await WriteDataAsync(context, firstChunk, cancellationToken);
+
+        // Content chunks
+        await foreach (var token in tokens.WithCancellation(cancellationToken))
+        {
+            var chunk = new ChatCompletionChunk
+            {
+                Id = id,
+                Model = model,
+                Created = created,
+                Choices =
+                [
+                    new ChatCompletionChunkChoice
+                    {
+                        Index = 0,
+                        Delta = new ChatCompletionDelta { Content = token }
+                    }
+                ]
+            };
+            await WriteDataAsync(context, chunk, cancellationToken);
+        }
+
+        // Final chunk with finish_reason
+        var finalChunk = new ChatCompletionChunk
+        {
+            Id = id,
+            Model = model,
+            Created = created,
+            Choices =
+            [
+                new ChatCompletionChunkChoice
+                {
+                    Index = 0,
+                    Delta = new ChatCompletionDelta(),
+                    FinishReason = "stop"
+                }
+            ]
+        };
+        await WriteDataAsync(context, finalChunk, cancellationToken);
+
+        await context.Response.WriteAsync("data: [DONE]\n\n", cancellationToken);
+        await context.Response.Body.FlushAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Stream any object as SSE
     /// </summary>
     public static async Task StreamAsync<T>(
         HttpContext context,
         IAsyncEnumerable<T> source,
         CancellationToken cancellationToken = default)
     {
-        // SSE 응답 전에 CORS 헤더를 수동으로 설정 (응답 시작 후 CORS 미들웨어 충돌 방지)
-        SetCorsHeaders(context);
-
-        context.Response.Headers.ContentType = "text/event-stream";
-        context.Response.Headers.CacheControl = "no-cache";
-        context.Response.Headers.Connection = "keep-alive";
+        SetSseHeaders(context);
 
         await foreach (var item in source.WithCancellation(cancellationToken))
         {
-            var json = JsonSerializer.Serialize(item, JsonOptions);
-            await context.Response.WriteAsync($"data: {json}\n\n", cancellationToken);
-            await context.Response.Body.FlushAsync(cancellationToken);
+            await WriteDataAsync(context, item, cancellationToken);
         }
 
         await context.Response.WriteAsync("data: [DONE]\n\n", cancellationToken);
         await context.Response.Body.FlushAsync(cancellationToken);
     }
 
-    /// <summary>
-    /// 문자열 스트림을 SSE로 전송 (토큰 스트리밍용)
-    /// </summary>
-    public static async Task StreamTokensAsync(
-        HttpContext context,
-        IAsyncEnumerable<string> tokens,
-        CancellationToken cancellationToken = default)
-    {
-        // SSE 응답 전에 CORS 헤더를 수동으로 설정 (응답 시작 후 CORS 미들웨어 충돌 방지)
-        SetCorsHeaders(context);
-
-        context.Response.Headers.ContentType = "text/event-stream";
-        context.Response.Headers.CacheControl = "no-cache";
-        context.Response.Headers.Connection = "keep-alive";
-
-        await foreach (var token in tokens.WithCancellation(cancellationToken))
-        {
-            var json = JsonSerializer.Serialize(new { token }, JsonOptions);
-            await context.Response.WriteAsync($"data: {json}\n\n", cancellationToken);
-            await context.Response.Body.FlushAsync(cancellationToken);
-        }
-
-        await context.Response.WriteAsync("data: [DONE]\n\n", cancellationToken);
-        await context.Response.Body.FlushAsync(cancellationToken);
-    }
-
-    /// <summary>
-    /// SSE 응답 전에 CORS 헤더를 수동으로 설정
-    /// </summary>
-    private static void SetCorsHeaders(HttpContext context)
+    private static void SetSseHeaders(HttpContext context)
     {
         var origin = context.Request.Headers.Origin.ToString();
         if (!string.IsNullOrEmpty(origin))
@@ -75,5 +114,16 @@ public static class SseHelper
             context.Response.Headers.AccessControlAllowOrigin = origin;
             context.Response.Headers.AccessControlAllowCredentials = "true";
         }
+
+        context.Response.Headers.ContentType = "text/event-stream";
+        context.Response.Headers.CacheControl = "no-cache";
+        context.Response.Headers.Connection = "keep-alive";
+    }
+
+    private static async Task WriteDataAsync<T>(HttpContext context, T data, CancellationToken ct)
+    {
+        var json = JsonSerializer.Serialize(data, JsonOptions);
+        await context.Response.WriteAsync($"data: {json}\n\n", ct);
+        await context.Response.Body.FlushAsync(ct);
     }
 }

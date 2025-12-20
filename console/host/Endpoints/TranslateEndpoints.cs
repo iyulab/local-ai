@@ -1,5 +1,7 @@
-using LMSupply.Console.Host.Models.Requests;
+using LMSupply.Console.Host.Infrastructure;
+using LMSupply.Console.Host.Models.OpenAI;
 using LMSupply.Console.Host.Services;
+using TranslateRequest = LMSupply.Console.Host.Models.OpenAI.TranslateRequest;
 
 namespace LMSupply.Console.Host.Endpoints;
 
@@ -7,71 +9,91 @@ public static class TranslateEndpoints
 {
     public static void MapTranslateEndpoints(this WebApplication app)
     {
-        var group = app.MapGroup("/api/translate")
+        var group = app.MapGroup("/v1")
             .WithTags("Translate")
             .WithOpenApi();
 
-        // 번역
-        group.MapPost("/", async (TranslateRequest request, ModelManagerService manager, CancellationToken ct) =>
+        // POST /v1/translate
+        group.MapPost("/translate", async (TranslateRequest request, ModelManagerService manager, CancellationToken ct) =>
         {
             try
             {
-                var translator = await manager.GetTranslatorAsync(request.ModelId, ct);
+                var inputs = ApiHelper.ParseInput(request.Input);
 
-                if (request.Texts != null && request.Texts.Count > 0)
+                if (inputs.Count == 0)
                 {
-                    // 배치 번역
-                    var results = await translator.TranslateBatchAsync(request.Texts, ct);
-                    return Results.Ok(new
-                    {
-                        modelId = translator.ModelId,
-                        translations = results.Select((r, i) => new
-                        {
-                            index = i,
-                            sourceText = r.SourceText,
-                            translatedText = r.TranslatedText,
-                            sourceLanguage = r.SourceLanguage,
-                            targetLanguage = r.TargetLanguage
-                        })
-                    });
-                }
-                else if (!string.IsNullOrEmpty(request.Text))
-                {
-                    // 단일 번역
-                    var result = await translator.TranslateAsync(request.Text, ct);
-                    return Results.Ok(new
-                    {
-                        modelId = translator.ModelId,
-                        sourceText = result.SourceText,
-                        translatedText = result.TranslatedText,
-                        sourceLanguage = result.SourceLanguage,
-                        targetLanguage = result.TargetLanguage
-                    });
+                    return ApiHelper.Error("'input' field is required");
                 }
 
-                return Results.BadRequest(new { error = "Either 'text' or 'texts' must be provided" });
+                var translator = await manager.GetTranslatorAsync(request.Model, ct);
+
+                var id = ApiHelper.GenerateId("translate");
+
+                if (inputs.Count == 1)
+                {
+                    var result = await translator.TranslateAsync(inputs[0], ct);
+                    return Results.Ok(new TranslateResponse
+                    {
+                        Id = id,
+                        Model = translator.ModelId,
+                        Translations =
+                        [
+                            new TranslationResult
+                            {
+                                Index = 0,
+                                SourceText = result.SourceText,
+                                TranslatedText = result.TranslatedText,
+                                SourceLanguage = result.SourceLanguage,
+                                TargetLanguage = result.TargetLanguage
+                            }
+                        ]
+                    });
+                }
+
+                // Batch translation
+                var results = await translator.TranslateBatchAsync(inputs, ct);
+                return Results.Ok(new TranslateResponse
+                {
+                    Id = id,
+                    Model = translator.ModelId,
+                    Translations = results.Select((r, i) => new TranslationResult
+                    {
+                        Index = i,
+                        SourceText = r.SourceText,
+                        TranslatedText = r.TranslatedText,
+                        SourceLanguage = r.SourceLanguage,
+                        TargetLanguage = r.TargetLanguage
+                    }).ToList()
+                });
+            }
+            catch (ArgumentException ex)
+            {
+                return ApiHelper.Error(ex.Message);
             }
             catch (Exception ex)
             {
-                return Results.Problem(ex.Message);
+                return ApiHelper.InternalError(ex);
             }
         })
         .WithName("Translate")
-        .WithSummary("텍스트 번역");
+        .WithSummary("Translate text between languages");
 
-        // 사용 가능한 Translator 모델 목록
-        group.MapGet("/models", () =>
+        // GET /v1/translate/languages - List available translation directions
+        group.MapGet("/translate/languages", () =>
         {
             var models = LMSupply.Translator.LocalTranslator.GetAllModels();
-            return Results.Ok(models.Select(m => new
+            return Results.Ok(new
             {
-                alias = m.Alias,
-                id = m.Id,
-                sourceLanguage = m.SourceLanguage,
-                targetLanguage = m.TargetLanguage
-            }));
+                languages = models.Select(m => new
+                {
+                    id = m.Id,
+                    alias = m.Alias,
+                    source = m.SourceLanguage,
+                    target = m.TargetLanguage
+                })
+            });
         })
-        .WithName("GetTranslateModels")
-        .WithSummary("사용 가능한 Translator 모델 목록");
+        .WithName("ListTranslateLanguages")
+        .WithSummary("List available translation directions");
     }
 }

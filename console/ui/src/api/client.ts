@@ -8,7 +8,6 @@ import type {
   RerankRequest,
   RerankResponse,
   SynthesizeRequest,
-  SynthesizeResponse,
   TranscribeResponse,
   ModelCheckResult,
   DownloadProgress,
@@ -21,7 +20,8 @@ import type {
   TranslateResponse,
 } from './types';
 
-const BASE_URL = '/api';
+const API_BASE = '/api';
+const V1_BASE = '/v1';
 
 async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(url, {
@@ -42,25 +42,30 @@ async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
 
 export const api = {
   // System
-  getSystemStatus: () => fetchJson<SystemStatusResponse>(`${BASE_URL}/system/status`),
+  getSystemStatus: () => fetchJson<SystemStatusResponse>(`${API_BASE}/system/status`),
 
-  // Models
-  getCachedModels: () => fetchJson<CachedModelsResponse>(`${BASE_URL}/models`),
-  getLoadedModels: () => fetchJson<LoadedModelInfo[]>(`${BASE_URL}/models/loaded`),
+  // Models (cache endpoints)
+  getCachedModels: () => fetchJson<CachedModelsResponse>(`${API_BASE}/cache/models`),
+  getLoadedModels: () => fetchJson<LoadedModelInfo[]>(`${API_BASE}/cache/loaded`),
   deleteModel: (repoId: string) =>
-    fetch(`${BASE_URL}/models/${encodeURIComponent(repoId)}`, { method: 'DELETE' }),
-  unloadModel: (key: string) =>
-    fetch(`${BASE_URL}/models/unload/${encodeURIComponent(key)}`, { method: 'POST' }),
+    fetch(`${API_BASE}/cache/models/${encodeURIComponent(repoId)}`, { method: 'DELETE' }),
+
+  // Unload model (not directly supported - use deleteModel to unload and remove)
+  unloadModel: async (_key: string) => {
+    // The backend doesn't have a dedicated unload endpoint.
+    // Models are unloaded automatically when deleted or when memory pressure occurs.
+    return new Response(null, { status: 501, statusText: 'Not Implemented' });
+  },
 
   // Model Check & Download
   checkModel: (repoId: string) =>
-    fetchJson<ModelCheckResult>(`${BASE_URL}/models/check`, {
+    fetchJson<ModelCheckResult>(`${API_BASE}/download/check`, {
       method: 'POST',
       body: JSON.stringify({ repoId }),
     }),
 
   downloadModel: async function* (repoId: string): AsyncGenerator<DownloadProgress> {
-    const response = await fetch(`${BASE_URL}/models/download`, {
+    const response = await fetch(`${API_BASE}/download/model`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ repoId }),
@@ -100,12 +105,18 @@ export const api = {
     }
   },
 
-  // Chat (SSE streaming)
+  // Chat (SSE streaming) - OpenAI compatible
   chatStream: async function* (request: ChatRequest): AsyncGenerator<string> {
-    const response = await fetch(`${BASE_URL}/chat`, {
+    const response = await fetch(`${V1_BASE}/chat/completions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(request),
+      body: JSON.stringify({
+        model: request.modelId,
+        messages: request.messages.map(m => ({ role: m.role, content: m.content })),
+        stream: true,
+        max_tokens: request.options?.maxTokens,
+        temperature: request.options?.temperature,
+      }),
     });
 
     if (!response.ok) {
@@ -132,7 +143,8 @@ export const api = {
           if (data === '[DONE]') return;
           try {
             const parsed = JSON.parse(data);
-            if (parsed.token) yield parsed.token;
+            const content = parsed.choices?.[0]?.delta?.content;
+            if (content) yield content;
           } catch {
             // Skip non-JSON lines
           }
@@ -141,40 +153,75 @@ export const api = {
     }
   },
 
-  chatComplete: (request: ChatRequest) =>
-    fetchJson<{ modelId: string; response: string }>(`${BASE_URL}/chat/complete`, {
+  chatComplete: async (request: ChatRequest) => {
+    const response = await fetchJson<{
+      id: string;
+      model: string;
+      choices: Array<{ message: { role: string; content: string } }>;
+    }>(`${V1_BASE}/chat/completions`, {
       method: 'POST',
-      body: JSON.stringify(request),
-    }),
+      body: JSON.stringify({
+        model: request.modelId,
+        messages: request.messages.map(m => ({ role: m.role, content: m.content })),
+        stream: false,
+        max_tokens: request.options?.maxTokens,
+        temperature: request.options?.temperature,
+      }),
+    });
+    return {
+      modelId: response.model,
+      response: response.choices[0]?.message?.content ?? '',
+    };
+  },
 
-  // Embed
+  // Embed - OpenAI compatible
   embed: (request: EmbedRequest) =>
-    fetchJson<EmbedResponse>(`${BASE_URL}/embed`, {
+    fetchJson<EmbedResponse>(`${V1_BASE}/embeddings`, {
       method: 'POST',
-      body: JSON.stringify(request),
+      body: JSON.stringify({
+        model: request.modelId,
+        input: request.texts,
+      }),
     }),
 
-  // Rerank
+  // Rerank - Cohere compatible
   rerank: (request: RerankRequest) =>
-    fetchJson<RerankResponse>(`${BASE_URL}/rerank`, {
+    fetchJson<RerankResponse>(`${V1_BASE}/rerank`, {
       method: 'POST',
-      body: JSON.stringify(request),
+      body: JSON.stringify({
+        model: request.modelId,
+        query: request.query,
+        documents: request.documents,
+        top_n: request.topK,
+      }),
     }),
 
-  // Synthesize
-  synthesizeJson: (request: SynthesizeRequest) =>
-    fetchJson<SynthesizeResponse>(`${BASE_URL}/synthesize/json`, {
+  // Synthesize - OpenAI compatible
+  synthesize: async (request: SynthesizeRequest): Promise<Blob> => {
+    const response = await fetch(`${V1_BASE}/audio/speech`, {
       method: 'POST',
-      body: JSON.stringify(request),
-    }),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: request.modelId,
+        input: request.text,
+        response_format: 'wav',
+      }),
+    });
 
-  // Transcribe
+    if (!response.ok) {
+      throw new Error('Synthesis failed');
+    }
+
+    return response.blob();
+  },
+
+  // Transcribe - OpenAI compatible
   transcribe: async (file: File, modelId: string = 'default'): Promise<TranscribeResponse> => {
     const formData = new FormData();
-    formData.append('audio', file);
-    formData.append('modelId', modelId);
+    formData.append('file', file);
+    formData.append('model', modelId);
 
-    const response = await fetch(`${BASE_URL}/transcribe`, {
+    const response = await fetch(`${V1_BASE}/audio/transcriptions`, {
       method: 'POST',
       body: formData,
     });
@@ -189,10 +236,10 @@ export const api = {
   // Caption
   caption: async (file: File, modelId: string = 'default'): Promise<CaptionResponse> => {
     const formData = new FormData();
-    formData.append('image', file);
-    formData.append('modelId', modelId);
+    formData.append('file', file);
+    formData.append('model', modelId);
 
-    const response = await fetch(`${BASE_URL}/caption`, {
+    const response = await fetch(`${V1_BASE}/images/caption`, {
       method: 'POST',
       body: formData,
     });
@@ -206,11 +253,11 @@ export const api = {
 
   vqa: async (file: File, question: string, modelId: string = 'default'): Promise<VqaResponse> => {
     const formData = new FormData();
-    formData.append('image', file);
+    formData.append('file', file);
     formData.append('question', question);
-    formData.append('modelId', modelId);
+    formData.append('model', modelId);
 
-    const response = await fetch(`${BASE_URL}/caption/vqa`, {
+    const response = await fetch(`${V1_BASE}/images/vqa`, {
       method: 'POST',
       body: formData,
     });
@@ -225,10 +272,10 @@ export const api = {
   // OCR
   ocr: async (file: File, language: string = 'en'): Promise<OcrResponse> => {
     const formData = new FormData();
-    formData.append('image', file);
+    formData.append('file', file);
     formData.append('language', language);
 
-    const response = await fetch(`${BASE_URL}/ocr`, {
+    const response = await fetch(`${V1_BASE}/images/ocr`, {
       method: 'POST',
       body: formData,
     });
@@ -240,16 +287,16 @@ export const api = {
     return response.json();
   },
 
-  getOcrLanguages: () => fetchJson<Array<{ code: string }>>(`${BASE_URL}/ocr/languages`),
+  getOcrLanguages: () => fetchJson<Array<{ code: string }>>(`${V1_BASE}/images/ocr/languages`),
 
   // Detect
   detect: async (file: File, modelId: string = 'default', confidenceThreshold: number = 0.5): Promise<DetectResponse> => {
     const formData = new FormData();
-    formData.append('image', file);
-    formData.append('modelId', modelId);
-    formData.append('confidenceThreshold', confidenceThreshold.toString());
+    formData.append('file', file);
+    formData.append('model', modelId);
+    formData.append('threshold', confidenceThreshold.toString());
 
-    const response = await fetch(`${BASE_URL}/detect`, {
+    const response = await fetch(`${V1_BASE}/images/detect`, {
       method: 'POST',
       body: formData,
     });
@@ -261,15 +308,15 @@ export const api = {
     return response.json();
   },
 
-  getCocoLabels: () => fetchJson<Array<{ classId: number; label: string }>>(`${BASE_URL}/detect/labels`),
+  getCocoLabels: () => fetchJson<Array<{ classId: number; label: string }>>(`${V1_BASE}/images/detect/labels`),
 
   // Segment
   segment: async (file: File, modelId: string = 'default'): Promise<SegmentResponse> => {
     const formData = new FormData();
-    formData.append('image', file);
-    formData.append('modelId', modelId);
+    formData.append('file', file);
+    formData.append('model', modelId);
 
-    const response = await fetch(`${BASE_URL}/segment`, {
+    const response = await fetch(`${V1_BASE}/images/segment`, {
       method: 'POST',
       body: formData,
     });
@@ -283,10 +330,25 @@ export const api = {
 
   // Translate
   translate: (request: TranslateRequest) =>
-    fetchJson<TranslateResponse>(`${BASE_URL}/translate`, {
+    fetchJson<TranslateResponse>(`${V1_BASE}/translate`, {
       method: 'POST',
-      body: JSON.stringify(request),
+      body: JSON.stringify({
+        model: request.modelId,
+        input: request.text ?? request.texts,
+        source_language: request.sourceLanguage,
+        target_language: request.targetLanguage,
+      }),
     }),
 
-  getTranslateModels: () => fetchJson<Array<{ alias: string; repoId: string; sourceLanguage: string; targetLanguage: string }>>(`${BASE_URL}/translate/models`),
+  getTranslateModels: async () => {
+    const response = await fetchJson<{
+      languages: Array<{ id: string; alias: string; source: string; target: string }>;
+    }>(`${V1_BASE}/translate/languages`);
+    return response.languages.map(l => ({
+      alias: l.alias,
+      repoId: l.id,
+      sourceLanguage: l.source,
+      targetLanguage: l.target,
+    }));
+  },
 };

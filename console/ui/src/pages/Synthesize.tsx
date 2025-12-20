@@ -26,11 +26,10 @@ export function Synthesize() {
     }
 
     try {
-      const response = await api.synthesizeJson({ modelId, text });
-      const audioBlob = base64ToBlob(response.audioBase64, 'audio/wav');
+      const audioBlob = await api.synthesize({ modelId, text });
       const url = URL.createObjectURL(audioBlob);
       setAudioUrl(url);
-      setDuration(response.durationSeconds);
+      setDuration(null); // Duration not available from binary response
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -118,14 +117,4 @@ export function Synthesize() {
       )}
     </div>
   );
-}
-
-function base64ToBlob(base64: string, contentType: string): Blob {
-  const byteCharacters = atob(base64);
-  const byteNumbers = new Array(byteCharacters.length);
-  for (let i = 0; i < byteCharacters.length; i++) {
-    byteNumbers[i] = byteCharacters.charCodeAt(i);
-  }
-  const byteArray = new Uint8Array(byteNumbers);
-  return new Blob([byteArray], { type: contentType });
 }

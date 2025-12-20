@@ -1,3 +1,5 @@
+using LMSupply.Console.Host.Infrastructure;
+using LMSupply.Console.Host.Models.OpenAI;
 using LMSupply.Console.Host.Services;
 
 namespace LMSupply.Console.Host.Endpoints;
@@ -6,31 +8,31 @@ public static class CaptionEndpoints
 {
     public static void MapCaptionEndpoints(this WebApplication app)
     {
-        var group = app.MapGroup("/api/caption")
-            .WithTags("Caption")
+        var group = app.MapGroup("/v1/images")
+            .WithTags("Vision")
             .WithOpenApi();
 
-        // 이미지 캡셔닝
-        group.MapPost("/", async (HttpRequest request, ModelManagerService manager, CancellationToken ct) =>
+        // POST /v1/images/caption - Image captioning
+        group.MapPost("/caption", async (HttpRequest request, ModelManagerService manager, CancellationToken ct) =>
         {
             try
             {
                 if (!request.HasFormContentType)
                 {
-                    return Results.BadRequest(new { error = "Form data expected" });
+                    return ApiHelper.Error("Form data expected with 'file' field");
                 }
 
                 var form = await request.ReadFormAsync(ct);
-                var file = form.Files.GetFile("image");
+                var file = form.Files.GetFile("file");
 
                 if (file == null || file.Length == 0)
                 {
-                    return Results.BadRequest(new { error = "Image file is required" });
+                    return ApiHelper.Error("Image file is required in 'file' field");
                 }
 
-                var modelId = form["modelId"].FirstOrDefault() ?? "default";
+                var model = form["model"].FirstOrDefault() ?? "default";
 
-                var captioner = await manager.GetCaptionerAsync(modelId, ct);
+                var captioner = await manager.GetCaptionerAsync(model, ct);
 
                 using var stream = file.OpenReadStream();
                 using var memoryStream = new MemoryStream();
@@ -38,50 +40,51 @@ public static class CaptionEndpoints
 
                 var result = await captioner.CaptionAsync(memoryStream.ToArray(), ct);
 
-                return Results.Ok(new
+                return Results.Ok(new CaptionResponse
                 {
-                    modelId = captioner.ModelId,
-                    caption = result.Caption,
-                    confidence = result.Confidence,
-                    alternatives = result.AlternativeCaptions
+                    Id = ApiHelper.GenerateId("caption"),
+                    Model = captioner.ModelId,
+                    Caption = result.Caption,
+                    Confidence = result.Confidence,
+                    Alternatives = result.AlternativeCaptions
                 });
             }
             catch (Exception ex)
             {
-                return Results.Problem(ex.Message);
+                return ApiHelper.InternalError(ex);
             }
         })
         .DisableAntiforgery()
         .WithName("CaptionImage")
-        .WithSummary("이미지 캡셔닝");
+        .WithSummary("Generate a caption for an image");
 
-        // VQA (Visual Question Answering)
+        // POST /v1/images/vqa - Visual Question Answering
         group.MapPost("/vqa", async (HttpRequest request, ModelManagerService manager, CancellationToken ct) =>
         {
             try
             {
                 if (!request.HasFormContentType)
                 {
-                    return Results.BadRequest(new { error = "Form data expected" });
+                    return ApiHelper.Error("Form data expected with 'file' and 'question' fields");
                 }
 
                 var form = await request.ReadFormAsync(ct);
-                var file = form.Files.GetFile("image");
+                var file = form.Files.GetFile("file");
 
                 if (file == null || file.Length == 0)
                 {
-                    return Results.BadRequest(new { error = "Image file is required" });
+                    return ApiHelper.Error("Image file is required in 'file' field");
                 }
 
                 var question = form["question"].FirstOrDefault();
                 if (string.IsNullOrWhiteSpace(question))
                 {
-                    return Results.BadRequest(new { error = "Question is required" });
+                    return ApiHelper.Error("'question' field is required");
                 }
 
-                var modelId = form["modelId"].FirstOrDefault() ?? "default";
+                var model = form["model"].FirstOrDefault() ?? "default";
 
-                var captioner = await manager.GetCaptionerAsync(modelId, ct);
+                var captioner = await manager.GetCaptionerAsync(model, ct);
 
                 using var stream = file.OpenReadStream();
                 using var memoryStream = new MemoryStream();
@@ -90,30 +93,22 @@ public static class CaptionEndpoints
 
                 var result = await captioner.AnswerAsync(memoryStream, question, ct);
 
-                return Results.Ok(new
+                return Results.Ok(new VqaResponse
                 {
-                    modelId = captioner.ModelId,
-                    question,
-                    answer = result.Answer,
-                    confidence = result.Confidence
+                    Id = ApiHelper.GenerateId("vqa"),
+                    Model = captioner.ModelId,
+                    Question = question,
+                    Answer = result.Answer,
+                    Confidence = result.Confidence
                 });
             }
             catch (Exception ex)
             {
-                return Results.Problem(ex.Message);
+                return ApiHelper.InternalError(ex);
             }
         })
         .DisableAntiforgery()
         .WithName("VisualQA")
-        .WithSummary("이미지 질문 응답 (VQA)");
-
-        // 사용 가능한 Captioner 모델 목록
-        group.MapGet("/models", () =>
-        {
-            var models = LMSupply.Captioner.LocalCaptioner.GetAvailableModels();
-            return Results.Ok(models.Select(m => new { alias = m }));
-        })
-        .WithName("GetCaptionModels")
-        .WithSummary("사용 가능한 Captioner 모델 목록");
+        .WithSummary("Answer a question about an image");
     }
 }

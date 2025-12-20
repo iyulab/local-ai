@@ -42,7 +42,7 @@ export function ModelSelector({ modelType, value, onChange, disabled }: ModelSel
       setError(null);
       try {
         const backendType = MODEL_TYPE_BACKEND[modelType];
-        const response = await fetch(`/api/models/type/${backendType}`);
+        const response = await fetch(`/api/cache/models/type/${backendType}`);
         if (!response.ok) {
           throw new Error('Failed to fetch models');
         }

@@ -1,6 +1,19 @@
 namespace LMSupply.Segmenter;
 
 /// <summary>
+/// Summary information for a detected segment.
+/// </summary>
+/// <param name="ClassId">The class ID of the segment.</param>
+/// <param name="Label">Human-readable label for the segment.</param>
+/// <param name="PixelCount">Number of pixels belonging to this segment.</param>
+/// <param name="CoverageRatio">Ratio of image covered by this segment (0.0 to 1.0).</param>
+public readonly record struct SegmentSummary(
+    int ClassId,
+    string Label,
+    int PixelCount,
+    float CoverageRatio);
+
+/// <summary>
 /// Represents the result of semantic segmentation.
 /// </summary>
 public sealed class SegmentationResult
@@ -97,6 +110,35 @@ public sealed class SegmentationResult
         return counts.ToDictionary(
             kvp => kvp.Key,
             kvp => kvp.Value / totalPixels * 100f);
+    }
+
+    /// <summary>
+    /// Gets the top N segments sorted by coverage, with optional label resolution.
+    /// </summary>
+    /// <param name="count">Maximum number of segments to return.</param>
+    /// <param name="labels">Optional class labels for resolving class IDs to names.</param>
+    /// <returns>List of segment summaries sorted by coverage (highest first).</returns>
+    public IReadOnlyList<SegmentSummary> GetTopSegments(int count, IReadOnlyList<string>? labels = null)
+    {
+        var totalPixels = Width * Height;
+        var pixelCounts = GetClassPixelCounts();
+
+        return pixelCounts
+            .OrderByDescending(kvp => kvp.Value)
+            .Take(count)
+            .Select(kvp => new SegmentSummary(
+                ClassId: kvp.Key,
+                Label: ResolveLabel(kvp.Key, labels),
+                PixelCount: kvp.Value,
+                CoverageRatio: (float)Math.Round((double)kvp.Value / totalPixels, 4)))
+            .ToList();
+    }
+
+    private static string ResolveLabel(int classId, IReadOnlyList<string>? labels)
+    {
+        if (labels is null || classId < 0 || classId >= labels.Count)
+            return "unknown";
+        return labels[classId];
     }
 
     private void ValidateCoordinates(int x, int y)

@@ -1,4 +1,7 @@
+using LMSupply.Console.Host.Infrastructure;
+using LMSupply.Console.Host.Models.OpenAI;
 using LMSupply.Console.Host.Services;
+using LMSupply.Detector;
 
 namespace LMSupply.Console.Host.Endpoints;
 
@@ -6,91 +9,78 @@ public static class DetectEndpoints
 {
     public static void MapDetectEndpoints(this WebApplication app)
     {
-        var group = app.MapGroup("/api/detect")
-            .WithTags("Detect")
+        var group = app.MapGroup("/v1/images")
+            .WithTags("Vision")
             .WithOpenApi();
 
-        // 객체 감지
-        group.MapPost("/", async (HttpRequest request, ModelManagerService manager, CancellationToken ct) =>
+        // POST /v1/images/detect - Object detection
+        group.MapPost("/detect", async (HttpRequest request, ModelManagerService manager, CancellationToken ct) =>
         {
             try
             {
                 if (!request.HasFormContentType)
                 {
-                    return Results.BadRequest(new { error = "Form data expected" });
+                    return ApiHelper.Error("Form data expected with 'file' field");
                 }
 
                 var form = await request.ReadFormAsync(ct);
-                var file = form.Files.GetFile("image");
+                var file = form.Files.GetFile("file");
 
                 if (file == null || file.Length == 0)
                 {
-                    return Results.BadRequest(new { error = "Image file is required" });
+                    return ApiHelper.Error("Image file is required in 'file' field");
                 }
 
-                var modelId = form["modelId"].FirstOrDefault() ?? "default";
-                var confidenceThresholdStr = form["confidenceThreshold"].FirstOrDefault();
-                var confidenceThreshold = float.TryParse(confidenceThresholdStr, out var ct2) ? ct2 : 0.5f;
+                var model = form["model"].FirstOrDefault() ?? "default";
+                var thresholdStr = form["threshold"].FirstOrDefault();
+                var threshold = float.TryParse(thresholdStr, out var t) ? t : 0.5f;
 
-                var detector = await manager.GetDetectorAsync(modelId, ct);
+                var detector = await manager.GetDetectorAsync(model, ct);
 
                 using var stream = file.OpenReadStream();
                 using var memoryStream = new MemoryStream();
                 await stream.CopyToAsync(memoryStream, ct);
 
-                var allResults = await detector.DetectAsync(memoryStream.ToArray(), ct);
-                // Filter by confidence threshold on client side
-                var results = allResults.Where(r => r.Confidence >= confidenceThreshold).ToList();
+                // Use SDK extension method for threshold filtering
+                var results = await detector.DetectAsync(memoryStream.ToArray(), threshold, ct);
 
-                return Results.Ok(new
+                return Results.Ok(new DetectionResponse
                 {
-                    modelId = detector.ModelId,
-                    count = results.Count,
-                    detections = results.Select(r => new
+                    Id = ApiHelper.GenerateId("detect"),
+                    Model = detector.ModelId,
+                    Objects = results.Select(r => new DetectedObject
                     {
-                        classId = r.ClassId,
-                        label = r.Label,
-                        confidence = r.Confidence,
-                        boundingBox = new
+                        Label = r.Label,
+                        Confidence = r.Confidence,
+                        BoundingBox = new Models.OpenAI.BoundingBox
                         {
-                            x = r.Box.X1,
-                            y = r.Box.Y1,
-                            width = r.Box.Width,
-                            height = r.Box.Height
+                            X = r.Box.X1,
+                            Y = r.Box.Y1,
+                            Width = r.Box.Width,
+                            Height = r.Box.Height
                         }
-                    })
+                    }).ToList()
                 });
             }
             catch (Exception ex)
             {
-                return Results.Problem(ex.Message);
+                return ApiHelper.InternalError(ex);
             }
         })
         .DisableAntiforgery()
         .WithName("DetectObjects")
-        .WithSummary("이미지에서 객체 감지");
+        .WithSummary("Detect objects in an image");
 
-        // 사용 가능한 Detector 모델 목록
-        group.MapGet("/models", () =>
-        {
-            var models = LMSupply.Detector.LocalDetector.GetAllModels();
-            return Results.Ok(models.Select(m => new
-            {
-                alias = m.Alias,
-                id = m.Id,
-                description = m.Description
-            }));
-        })
-        .WithName("GetDetectModels")
-        .WithSummary("사용 가능한 Detector 모델 목록");
-
-        // COCO 클래스 레이블 목록
-        group.MapGet("/labels", () =>
+        // GET /v1/images/detect/labels - List COCO class labels
+        group.MapGet("/detect/labels", () =>
         {
             var labels = LMSupply.Detector.LocalDetector.CocoClassLabels;
-            return Results.Ok(labels.Select((l, i) => new { classId = i, label = l }));
+            return Results.Ok(new
+            {
+                labels = labels.Select((l, i) => new { id = i, name = l })
+            });
         })
-        .WithName("GetCocoLabels")
-        .WithSummary("COCO 클래스 레이블 목록");
+        .WithName("ListDetectionLabels")
+        .WithSummary("List available object detection labels");
     }
 }

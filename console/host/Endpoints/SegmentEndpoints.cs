@@ -1,3 +1,5 @@
+using LMSupply.Console.Host.Infrastructure;
+using LMSupply.Console.Host.Models.OpenAI;
 using LMSupply.Console.Host.Services;
 
 namespace LMSupply.Console.Host.Endpoints;
@@ -6,31 +8,32 @@ public static class SegmentEndpoints
 {
     public static void MapSegmentEndpoints(this WebApplication app)
     {
-        var group = app.MapGroup("/api/segment")
-            .WithTags("Segment")
+        var group = app.MapGroup("/v1/images")
+            .WithTags("Vision")
             .WithOpenApi();
 
-        // 이미지 세그멘테이션
-        group.MapPost("/", async (HttpRequest request, ModelManagerService manager, CancellationToken ct) =>
+        // POST /v1/images/segment - Image segmentation
+        group.MapPost("/segment", async (HttpRequest request, ModelManagerService manager, CancellationToken ct) =>
         {
             try
             {
                 if (!request.HasFormContentType)
                 {
-                    return Results.BadRequest(new { error = "Form data expected" });
+                    return ApiHelper.Error("Form data expected with 'file' field");
                 }
 
                 var form = await request.ReadFormAsync(ct);
-                var file = form.Files.GetFile("image");
+                var file = form.Files.GetFile("file");
 
                 if (file == null || file.Length == 0)
                 {
-                    return Results.BadRequest(new { error = "Image file is required" });
+                    return ApiHelper.Error("Image file is required in 'file' field");
                 }
 
-                var modelId = form["modelId"].FirstOrDefault() ?? "default";
+                var model = form["model"].FirstOrDefault() ?? "default";
+                var includeMask = form["include_mask"].FirstOrDefault()?.Equals("true", StringComparison.OrdinalIgnoreCase) ?? false;
 
-                var segmenter = await manager.GetSegmenterAsync(modelId, ct);
+                var segmenter = await manager.GetSegmenterAsync(model, ct);
 
                 using var stream = file.OpenReadStream();
                 using var memoryStream = new MemoryStream();
@@ -38,113 +41,54 @@ public static class SegmentEndpoints
 
                 var result = await segmenter.SegmentAsync(memoryStream.ToArray(), ct);
 
-                // ClassMap을 요약 정보로 변환 (전체 배열은 너무 큼)
-                var classHistogram = result.ClassMap
-                    .GroupBy(c => c)
-                    .OrderByDescending(g => g.Count())
-                    .Take(10)
-                    .ToDictionary(g => g.Key, g => g.Count());
-
-                var labels = LMSupply.Segmenter.LocalSegmenter.Ade20kClassLabels;
-
-                return Results.Ok(new
+                // Get top segments using SDK method
+                var topSegments = result.GetTopSegments(10, segmenter.ClassLabels);
+                var segments = topSegments.Select(s => new Segment
                 {
-                    modelId = segmenter.ModelId,
-                    width = result.Width,
-                    height = result.Height,
-                    numClasses = result.UniqueClassCount,
-                    topClasses = classHistogram.Select(kv => new
+                    Id = s.ClassId,
+                    Label = s.Label,
+                    Score = s.CoverageRatio
+                }).ToList();
+
+                // Build mask if requested
+                string? maskBase64 = null;
+                if (includeMask)
+                {
+                    var classMapBytes = new byte[result.ClassMap.Length];
+                    for (int i = 0; i < result.ClassMap.Length; i++)
                     {
-                        classId = kv.Key,
-                        label = kv.Key >= 0 && kv.Key < labels.Count ? labels[kv.Key] : "unknown",
-                        pixelCount = kv.Value,
-                        percentage = Math.Round((double)kv.Value / result.ClassMap.Length * 100, 2)
-                    })
+                        classMapBytes[i] = (byte)Math.Clamp(result.ClassMap[i], 0, 255);
+                    }
+                    maskBase64 = Convert.ToBase64String(classMapBytes);
+                }
+
+                return Results.Ok(new SegmentationResponse
+                {
+                    Id = ApiHelper.GenerateId("seg"),
+                    Model = segmenter.ModelId,
+                    Segments = segments,
+                    MaskBase64 = maskBase64
                 });
             }
             catch (Exception ex)
             {
-                return Results.Problem(ex.Message);
+                return ApiHelper.InternalError(ex);
             }
         })
         .DisableAntiforgery()
         .WithName("SegmentImage")
-        .WithSummary("이미지 세그멘테이션");
+        .WithSummary("Segment an image into semantic regions");
 
-        // 세그멘테이션 결과를 마스크 이미지로 반환
-        group.MapPost("/mask", async (HttpRequest request, ModelManagerService manager, CancellationToken ct) =>
-        {
-            try
-            {
-                if (!request.HasFormContentType)
-                {
-                    return Results.BadRequest(new { error = "Form data expected" });
-                }
-
-                var form = await request.ReadFormAsync(ct);
-                var file = form.Files.GetFile("image");
-
-                if (file == null || file.Length == 0)
-                {
-                    return Results.BadRequest(new { error = "Image file is required" });
-                }
-
-                var modelId = form["modelId"].FirstOrDefault() ?? "default";
-
-                var segmenter = await manager.GetSegmenterAsync(modelId, ct);
-
-                using var stream = file.OpenReadStream();
-                using var memoryStream = new MemoryStream();
-                await stream.CopyToAsync(memoryStream, ct);
-
-                var result = await segmenter.SegmentAsync(memoryStream.ToArray(), ct);
-
-                // ClassMap을 Base64로 인코딩하여 반환
-                var classMapBytes = new byte[result.ClassMap.Length];
-                for (int i = 0; i < result.ClassMap.Length; i++)
-                {
-                    classMapBytes[i] = (byte)Math.Clamp(result.ClassMap[i], 0, 255);
-                }
-
-                return Results.Ok(new
-                {
-                    modelId = segmenter.ModelId,
-                    width = result.Width,
-                    height = result.Height,
-                    numClasses = result.UniqueClassCount,
-                    classMapBase64 = Convert.ToBase64String(classMapBytes)
-                });
-            }
-            catch (Exception ex)
-            {
-                return Results.Problem(ex.Message);
-            }
-        })
-        .DisableAntiforgery()
-        .WithName("GetSegmentMask")
-        .WithSummary("세그멘테이션 마스크 반환");
-
-        // 사용 가능한 Segmenter 모델 목록
-        group.MapGet("/models", () =>
-        {
-            var models = LMSupply.Segmenter.LocalSegmenter.GetAllModels();
-            return Results.Ok(models.Select(m => new
-            {
-                alias = m.Alias,
-                id = m.Id,
-                description = m.Description
-            }));
-        })
-        .WithName("GetSegmentModels")
-        .WithSummary("사용 가능한 Segmenter 모델 목록");
-
-        // ADE20K 클래스 레이블 목록
-        group.MapGet("/labels", () =>
+        // GET /v1/images/segment/labels - List ADE20K class labels
+        group.MapGet("/segment/labels", () =>
         {
             var labels = LMSupply.Segmenter.LocalSegmenter.Ade20kClassLabels;
-            return Results.Ok(labels.Select((l, i) => new { classId = i, label = l }));
+            return Results.Ok(new
+            {
+                labels = labels.Select((l, i) => new { id = i, name = l })
+            });
         })
-        .WithName("GetAde20kLabels")
-        .WithSummary("ADE20K 클래스 레이블 목록");
+        .WithName("ListSegmentLabels")
+        .WithSummary("List available segmentation labels (ADE20K)");
     }
 }

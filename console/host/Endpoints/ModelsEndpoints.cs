@@ -1,3 +1,5 @@
+using LMSupply.Console.Host.Infrastructure;
+using LMSupply.Console.Host.Models.OpenAI;
 using LMSupply.Console.Host.Services;
 using LMSupply.Download;
 
@@ -7,12 +9,66 @@ public static class ModelsEndpoints
 {
     public static void MapModelsEndpoints(this WebApplication app)
     {
-        var group = app.MapGroup("/api/models")
+        // OpenAI-compatible /v1/models endpoint
+        var v1Group = app.MapGroup("/v1")
             .WithTags("Models")
             .WithOpenApi();
 
-        // 캐시된 모델 목록
-        group.MapGet("/", (CacheService cache) =>
+        // GET /v1/models - List available models (OpenAI compatible)
+        v1Group.MapGet("/models", (ModelManagerService manager) =>
+        {
+            var loadedModels = manager.GetLoadedModels();
+            var models = loadedModels.Select(m => new ModelInfo
+            {
+                Id = $"{m.ModelType.ToString().ToLower()}:{m.ModelId}",
+                OwnedBy = "lmsupply"
+            }).ToList();
+
+            // Add well-known model aliases
+            var aliases = new[]
+            {
+                new ModelInfo { Id = "generator:default", OwnedBy = "lmsupply" },
+                new ModelInfo { Id = "embedder:default", OwnedBy = "lmsupply" },
+                new ModelInfo { Id = "reranker:default", OwnedBy = "lmsupply" },
+                new ModelInfo { Id = "transcriber:default", OwnedBy = "lmsupply" },
+                new ModelInfo { Id = "synthesizer:default", OwnedBy = "lmsupply" },
+                new ModelInfo { Id = "translator:default", OwnedBy = "lmsupply" },
+                new ModelInfo { Id = "captioner:default", OwnedBy = "lmsupply" },
+                new ModelInfo { Id = "ocr:default", OwnedBy = "lmsupply" },
+                new ModelInfo { Id = "detector:default", OwnedBy = "lmsupply" },
+                new ModelInfo { Id = "segmenter:default", OwnedBy = "lmsupply" }
+            };
+
+            // Merge loaded models with aliases (avoid duplicates)
+            var allModels = aliases
+                .Where(a => !models.Any(m => m.Id == a.Id))
+                .Concat(models)
+                .ToList();
+
+            return Results.Ok(new ModelListResponse { Data = allModels });
+        })
+        .WithName("ListModels")
+        .WithSummary("List available models (OpenAI compatible)");
+
+        // GET /v1/models/{model} - Get model info (OpenAI compatible)
+        v1Group.MapGet("/models/{*model}", (string model) =>
+        {
+            return Results.Ok(new ModelInfo
+            {
+                Id = model,
+                OwnedBy = "lmsupply"
+            });
+        })
+        .WithName("GetModel")
+        .WithSummary("Get model information (OpenAI compatible)");
+
+        // Cache management endpoints (LMSupply-specific)
+        var cacheGroup = app.MapGroup("/api/cache")
+            .WithTags("Cache")
+            .WithOpenApi();
+
+        // GET /api/cache/models - List cached models
+        cacheGroup.MapGet("/models", (CacheService cache) =>
         {
             var models = cache.GetCachedModels();
             return Results.Ok(new
@@ -23,35 +79,35 @@ public static class ModelsEndpoints
             });
         })
         .WithName("GetCachedModels")
-        .WithSummary("캐시된 모든 모델 목록 조회");
+        .WithSummary("List all cached models");
 
-        // 타입별 모델 목록
-        group.MapGet("/type/{type}", (string type, CacheService cache) =>
+        // GET /api/cache/models/type/{type} - List cached models by type
+        cacheGroup.MapGet("/models/type/{type}", (string type, CacheService cache) =>
         {
             if (!Enum.TryParse<ModelType>(type, ignoreCase: true, out var modelType))
             {
-                return Results.BadRequest(new { error = $"Invalid model type: {type}" });
+                return ApiHelper.Error($"Invalid model type: {type}");
             }
 
             var models = cache.GetCachedModelsByType(modelType);
             return Results.Ok(models);
         })
         .WithName("GetModelsByType")
-        .WithSummary("타입별 모델 목록 조회");
+        .WithSummary("List cached models by type");
 
-        // 로드된 모델 목록
-        group.MapGet("/loaded", (ModelManagerService manager) =>
+        // GET /api/cache/loaded - List currently loaded models
+        cacheGroup.MapGet("/loaded", (ModelManagerService manager) =>
         {
             var models = manager.GetLoadedModels();
             return Results.Ok(models);
         })
         .WithName("GetLoadedModels")
-        .WithSummary("현재 로드된 모델 목록");
+        .WithSummary("List currently loaded models");
 
-        // 모델 삭제
-        group.MapDelete("/{*repoId}", async (string repoId, CacheService cache, ModelManagerService manager) =>
+        // DELETE /api/cache/models/{repoId} - Delete cached model
+        cacheGroup.MapDelete("/models/{*repoId}", async (string repoId, CacheService cache, ModelManagerService manager) =>
         {
-            // 로드된 모델이면 먼저 언로드
+            // Unload model first if loaded
             var loadedModels = manager.GetLoadedModels();
             foreach (var loaded in loadedModels.Where(m => m.ModelId == repoId))
             {
@@ -67,10 +123,10 @@ public static class ModelsEndpoints
             return Results.NotFound(new { error = $"Model not found: {repoId}" });
         })
         .WithName("DeleteModel")
-        .WithSummary("캐시된 모델 삭제");
+        .WithSummary("Delete a cached model");
 
-        // 캐시 통계
-        group.MapGet("/stats", (CacheService cache) =>
+        // GET /api/cache/stats - Cache statistics
+        cacheGroup.MapGet("/stats", (CacheService cache) =>
         {
             var models = cache.GetCachedModels();
             var byType = models.GroupBy(m => m.DetectedType)
@@ -85,24 +141,29 @@ public static class ModelsEndpoints
             });
         })
         .WithName("GetCacheStats")
-        .WithSummary("캐시 통계");
+        .WithSummary("Cache statistics");
 
-        // 모델 검증 (HuggingFace 존재 여부 및 지원 여부)
-        group.MapPost("/check", async (ModelCheckRequest request, DownloadService download, CancellationToken ct) =>
+        // Download endpoints
+        var downloadGroup = app.MapGroup("/api/download")
+            .WithTags("Download")
+            .WithOpenApi();
+
+        // POST /api/download/check - Check model availability on HuggingFace
+        downloadGroup.MapPost("/check", async (ModelCheckRequest request, DownloadService download, CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(request.RepoId))
             {
-                return Results.BadRequest(new { error = "RepoId is required" });
+                return ApiHelper.Error("RepoId is required");
             }
 
             var result = await download.CheckModelAsync(request.RepoId, ct);
             return Results.Ok(result);
         })
         .WithName("CheckModel")
-        .WithSummary("HuggingFace 모델 검증");
+        .WithSummary("Check model availability on HuggingFace");
 
-        // 모델 다운로드 (SSE 진행률)
-        group.MapPost("/download", async (ModelDownloadRequest request, DownloadService download, HttpContext context, CancellationToken ct) =>
+        // POST /api/download/model - Download model from HuggingFace (SSE progress)
+        downloadGroup.MapPost("/model", async (ModelDownloadRequest request, DownloadService download, HttpContext context, CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(request.RepoId))
             {
@@ -111,7 +172,7 @@ public static class ModelsEndpoints
                 return;
             }
 
-            // SSE 응답 전에 CORS 헤더를 수동으로 설정 (응답 시작 후 CORS 미들웨어 충돌 방지)
+            // Set CORS headers manually before SSE response (prevents middleware conflict)
             var origin = context.Request.Headers.Origin.ToString();
             if (!string.IsNullOrEmpty(origin))
             {
@@ -136,7 +197,6 @@ public static class ModelsEndpoints
                             totalBytes = progress.TotalBytes,
                             percentComplete = progress.PercentComplete
                         });
-                        // Synchronous write from Progress<T> callback
                         context.Response.WriteAsync($"data: {data}\n\n", ct).GetAwaiter().GetResult();
                         context.Response.Body.FlushAsync(ct).GetAwaiter().GetResult();
                     },
@@ -151,7 +211,7 @@ public static class ModelsEndpoints
             }
         })
         .WithName("DownloadModel")
-        .WithSummary("HuggingFace 모델 다운로드 (SSE)");
+        .WithSummary("Download model from HuggingFace (SSE progress)");
     }
 }
 

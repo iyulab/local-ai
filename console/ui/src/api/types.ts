@@ -235,6 +235,8 @@ export interface TranslateRequest {
   modelId: string;
   text?: string;
   texts?: string[];
+  sourceLanguage?: string;
+  targetLanguage?: string;
 }
 
 export interface TranslationResult {

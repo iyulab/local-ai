@@ -1,6 +1,7 @@
-using LMSupply.Download;
-using LMSupply.Console.Host.Models.Requests;
+using LMSupply.Console.Host.Infrastructure;
+using LMSupply.Console.Host.Models.OpenAI;
 using LMSupply.Console.Host.Services;
+using RerankRequest = LMSupply.Console.Host.Models.OpenAI.RerankRequest;
 
 namespace LMSupply.Console.Host.Endpoints;
 
@@ -8,82 +9,54 @@ public static class RerankEndpoints
 {
     public static void MapRerankEndpoints(this WebApplication app)
     {
-        var group = app.MapGroup("/api/rerank")
+        var group = app.MapGroup("/v1")
             .WithTags("Rerank")
             .WithOpenApi();
 
-        // 리랭킹
-        group.MapPost("/", async (RerankRequest request, ModelManagerService manager, CancellationToken ct) =>
+        // POST /v1/rerank - Cohere API compatible
+        group.MapPost("/rerank", async (RerankRequest request, ModelManagerService manager, CancellationToken ct) =>
         {
             try
             {
-                var reranker = await manager.GetRerankerAsync(request.ModelId, ct);
+                if (string.IsNullOrWhiteSpace(request.Query))
+                {
+                    return ApiHelper.Error("'query' field is required");
+                }
 
+                if (request.Documents == null || request.Documents.Count == 0)
+                {
+                    return ApiHelper.Error("'documents' field is required and must not be empty");
+                }
+
+                var reranker = await manager.GetRerankerAsync(request.Model, ct);
                 var results = await reranker.RerankAsync(
                     request.Query,
                     request.Documents,
-                    request.TopK,
+                    request.TopN,
                     ct);
 
-                return Results.Ok(new
+                var id = ApiHelper.GenerateId("rerank");
+
+                return Results.Ok(new RerankResponse
                 {
-                    modelId = reranker.ModelId,
-                    query = request.Query,
-                    results = results.Select(r => new
+                    Id = id,
+                    Model = reranker.ModelId,
+                    Results = results.Select(r => new RerankResult
                     {
-                        index = r.OriginalIndex,
-                        score = r.Score,
-                        document = r.Document
-                    })
+                        Index = r.OriginalIndex,
+                        RelevanceScore = r.Score,
+                        Document = request.ReturnDocuments
+                            ? new RerankDocument { Text = r.Document }
+                            : null
+                    }).ToList()
                 });
             }
             catch (Exception ex)
             {
-                return Results.Problem(ex.Message);
+                return ApiHelper.InternalError(ex);
             }
         })
         .WithName("Rerank")
-        .WithSummary("문서 리랭킹");
-
-        // 점수만 계산 (정렬 없음)
-        group.MapPost("/score", async (RerankRequest request, ModelManagerService manager, CancellationToken ct) =>
-        {
-            try
-            {
-                var reranker = await manager.GetRerankerAsync(request.ModelId, ct);
-                var scores = await reranker.ScoreAsync(request.Query, request.Documents, ct);
-
-                return Results.Ok(new
-                {
-                    modelId = reranker.ModelId,
-                    query = request.Query,
-                    scores = request.Documents.Zip(scores, (doc, score) => new
-                    {
-                        document = doc,
-                        score
-                    })
-                });
-            }
-            catch (Exception ex)
-            {
-                return Results.Problem(ex.Message);
-            }
-        })
-        .WithName("Score")
-        .WithSummary("관련성 점수 계산");
-
-        // 사용 가능한 Reranker 모델 목록
-        group.MapGet("/models", (CacheService cache) =>
-        {
-            var models = cache.GetCachedModelsByType(ModelType.Reranker);
-            return Results.Ok(models.Select(m => new
-            {
-                m.RepoId,
-                m.SizeMB,
-                m.LastModified
-            }));
-        })
-        .WithName("GetRerankModels")
-        .WithSummary("사용 가능한 Reranker 모델 목록");
+        .WithSummary("Rerank documents by relevance (Cohere API compatible)");
     }
 }

@@ -1,7 +1,7 @@
-using LMSupply.Download;
+using LMSupply.Generator;
 using LMSupply.Generator.Models;
 using LMSupply.Console.Host.Infrastructure;
-using LMSupply.Console.Host.Models.Requests;
+using LMSupply.Console.Host.Models.OpenAI;
 using LMSupply.Console.Host.Services;
 
 namespace LMSupply.Console.Host.Endpoints;
@@ -10,99 +10,71 @@ public static class ChatEndpoints
 {
     public static void MapChatEndpoints(this WebApplication app)
     {
-        var group = app.MapGroup("/api/chat")
+        var group = app.MapGroup("/v1/chat")
             .WithTags("Chat")
             .WithOpenApi();
 
-        // 채팅 (SSE 스트리밍)
-        group.MapPost("/", async (ChatRequest request, HttpContext context, ModelManagerService manager) =>
+        // POST /v1/chat/completions - OpenAI compatible
+        group.MapPost("/completions", async (ChatCompletionRequest request, HttpContext context, ModelManagerService manager) =>
         {
             try
             {
-                var cancellationToken = context.RequestAborted;
-                var generator = await manager.GetGeneratorAsync(request.ModelId, cancellationToken);
+                var ct = context.RequestAborted;
+                var generator = await manager.GetGeneratorAsync(request.Model, ct);
 
                 var messages = request.Messages.Select(m =>
                     new ChatMessage(Enum.Parse<ChatRole>(m.Role, ignoreCase: true), m.Content));
 
-                var options = request.Options != null
-                    ? new GenerationOptions
-                    {
-                        MaxTokens = request.Options.MaxTokens,
-                        Temperature = request.Options.Temperature,
-                        TopP = request.Options.TopP,
-                        TopK = request.Options.TopK,
-                        RepetitionPenalty = request.Options.RepetitionPenalty,
-                        StopSequences = request.Options.StopSequences?.ToList()
-                    }
-                    : null;
-
-                var tokens = generator.GenerateChatAsync(messages, options, cancellationToken);
-                await SseHelper.StreamTokensAsync(context, tokens, cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                context.Response.StatusCode = 500;
-                await context.Response.WriteAsJsonAsync(new { error = ex.Message });
-            }
-        })
-        .WithName("ChatStream")
-        .WithSummary("채팅 (SSE 스트리밍)");
-
-        // 채팅 (비스트리밍)
-        group.MapPost("/complete", async (ChatRequest request, ModelManagerService manager, CancellationToken ct) =>
-        {
-            try
-            {
-                var generator = await manager.GetGeneratorAsync(request.ModelId, ct);
-
-                var messages = request.Messages.Select(m =>
-                    new ChatMessage(Enum.Parse<ChatRole>(m.Role, ignoreCase: true), m.Content));
-
-                var options = request.Options != null
-                    ? new GenerationOptions
-                    {
-                        MaxTokens = request.Options.MaxTokens,
-                        Temperature = request.Options.Temperature,
-                        TopP = request.Options.TopP,
-                        TopK = request.Options.TopK,
-                        RepetitionPenalty = request.Options.RepetitionPenalty,
-                        StopSequences = request.Options.StopSequences?.ToList()
-                    }
-                    : null;
-
-                var response = await generator.GenerateChatCompleteAsync(messages, options, ct);
-
-                return Results.Ok(new
+                var options = new GenerationOptions
                 {
-                    modelId = generator.ModelId,
-                    response,
-                    usage = new
+                    MaxTokens = request.MaxTokens ?? 2048,
+                    Temperature = request.Temperature ?? 0.7f,
+                    TopP = request.TopP ?? 0.9f,
+                    StopSequences = request.Stop?.ToList()
+                };
+
+                if (request.Stream)
+                {
+                    var tokens = generator.GenerateChatAsync(messages, options, ct);
+                    await SseHelper.StreamChatCompletionAsync(context, generator.ModelId, tokens, ct);
+                    return Results.Empty;
+                }
+
+                // Non-streaming response with usage tracking
+                var result = await generator.GenerateChatWithUsageAsync(messages, options, ct);
+                var id = ApiHelper.GenerateId("chatcmpl");
+
+                return Results.Ok(new ChatCompletionResponse
+                {
+                    Id = id,
+                    Model = generator.ModelId,
+                    Choices =
+                    [
+                        new ChatCompletionChoice
+                        {
+                            Index = 0,
+                            Message = new ChatCompletionMessage
+                            {
+                                Role = "assistant",
+                                Content = result.Content
+                            },
+                            FinishReason = "stop"
+                        }
+                    ],
+                    Usage = new Usage
                     {
-                        maxContextLength = generator.MaxContextLength
+                        PromptTokens = result.Usage.PromptTokens,
+                        CompletionTokens = result.Usage.CompletionTokens,
+                        TotalTokens = result.Usage.TotalTokens
                     }
                 });
             }
             catch (Exception ex)
             {
-                return Results.Problem(ex.Message);
+                return ApiHelper.InternalError(ex);
             }
         })
-        .WithName("ChatComplete")
-        .WithSummary("채팅 (비스트리밍)");
-
-        // 사용 가능한 Generator 모델 목록
-        group.MapGet("/models", (CacheService cache) =>
-        {
-            var models = cache.GetCachedModelsByType(ModelType.Generator);
-            return Results.Ok(models.Select(m => new
-            {
-                m.RepoId,
-                m.SizeMB,
-                m.LastModified
-            }));
-        })
-        .WithName("GetChatModels")
-        .WithSummary("사용 가능한 Generator 모델 목록");
+        .WithName("CreateChatCompletion")
+        .WithSummary("Create a chat completion (OpenAI compatible)");
     }
 }
