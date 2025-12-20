@@ -47,7 +47,7 @@ public static class ModelRegistryEndpoints
 
             return Results.Ok(modelType);
         })
-        .WithName("GetModelsByType")
+        .WithName("GetRegistryModelsByType")
         .WithSummary("Get models for a specific type")
         .WithDescription("Returns all aliases and repo IDs for a specific model type.");
     }
