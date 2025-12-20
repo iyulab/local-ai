@@ -1,3 +1,7 @@
+// ============================================================================
+// System Types
+// ============================================================================
+
 export interface SystemStatus {
   engineReady: boolean;
   gpuAvailable: boolean;
@@ -14,6 +18,29 @@ export interface SystemStatus {
   timestamp: string;
 }
 
+export interface SystemStatusResponse {
+  status: SystemStatus;
+  loadedModels: number;
+  models: LoadedModelInfo[];
+}
+
+// ============================================================================
+// Model/Cache Types
+// ============================================================================
+
+export type ModelType =
+  | 'Generator'
+  | 'Embedder'
+  | 'Reranker'
+  | 'Transcriber'
+  | 'Synthesizer'
+  | 'Translator'
+  | 'Captioner'
+  | 'Ocr'
+  | 'Detector'
+  | 'Segmenter'
+  | 'Unknown';
+
 export interface CachedModelInfo {
   repoId: string;
   localPath: string;
@@ -24,14 +51,6 @@ export interface CachedModelInfo {
   lastModified: string;
   files: string[];
 }
-
-export type ModelType =
-  | 'Generator'
-  | 'Embedder'
-  | 'Reranker'
-  | 'Transcriber'
-  | 'Synthesizer'
-  | 'Unknown';
 
 export interface LoadedModelInfo {
   modelId: string;
@@ -44,49 +63,6 @@ export interface CachedModelsResponse {
   models: CachedModelInfo[];
   totalCount: number;
   totalSizeMB: number;
-}
-
-export interface SystemStatusResponse {
-  status: SystemStatus;
-  loadedModels: number;
-  models: LoadedModelInfo[];
-}
-
-export interface ChatMessage {
-  role: 'system' | 'user' | 'assistant';
-  content: string;
-}
-
-export interface ChatOptions {
-  maxTokens?: number;
-  temperature?: number;
-  topP?: number;
-  topK?: number;
-  repetitionPenalty?: number;
-  stopSequences?: string[];
-}
-
-export interface ChatRequest {
-  modelId: string;
-  messages: ChatMessage[];
-  options?: ChatOptions;
-}
-
-export interface EmbedRequest {
-  modelId: string;
-  texts: string[];
-  normalize?: boolean;
-}
-
-export interface EmbeddingResult {
-  index: number;
-  embedding: number[];
-}
-
-export interface EmbedResponse {
-  modelId: string;
-  embeddings: EmbeddingResult[];
-  dimensions: number;
 }
 
 export interface ModelCheckResult {
@@ -109,66 +85,144 @@ export interface DownloadProgress {
   error?: string;
 }
 
+// ============================================================================
+// Chat Types (OpenAI Compatible)
+// ============================================================================
+
+export interface ChatMessage {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+}
+
+export interface ChatOptions {
+  maxTokens?: number;
+  temperature?: number;
+  topP?: number;
+  topK?: number;
+  repetitionPenalty?: number;
+  stopSequences?: string[];
+}
+
+export interface ChatRequest {
+  modelId: string;
+  messages: ChatMessage[];
+  options?: ChatOptions;
+}
+
+// ============================================================================
+// Embed Types (OpenAI Compatible)
+// ============================================================================
+
+export interface EmbedRequest {
+  modelId: string;
+  texts: string[];
+  normalize?: boolean;
+}
+
+export interface EmbeddingData {
+  object: string;
+  index: number;
+  embedding: number[];
+}
+
+export interface EmbeddingUsage {
+  prompt_tokens: number;
+  total_tokens: number;
+}
+
+export interface EmbedResponse {
+  object: string;
+  data: EmbeddingData[];
+  model: string;
+  usage: EmbeddingUsage;
+}
+
+// ============================================================================
+// Rerank Types (Cohere Compatible)
+// ============================================================================
+
 export interface RerankRequest {
   modelId: string;
   query: string;
   documents: string[];
-  topK?: number;
+  topN?: number;
+  returnDocuments?: boolean;
+}
+
+export interface RerankResultDocument {
+  text: string;
 }
 
 export interface RerankResult {
   index: number;
-  score: number;
-  document: string;
+  relevance_score: number;
+  document?: RerankResultDocument;
 }
 
 export interface RerankResponse {
-  modelId: string;
-  query: string;
+  id: string;
+  model: string;
   results: RerankResult[];
 }
+
+// ============================================================================
+// Synthesize Types (OpenAI Compatible)
+// ============================================================================
 
 export interface SynthesizeRequest {
   modelId: string;
   text: string;
+  voice?: string;
+  responseFormat?: string;
+  speed?: number;
 }
 
-export interface SynthesizeResponse {
-  modelId: string;
+// Response is binary audio (Blob)
+
+// ============================================================================
+// Transcribe Types (OpenAI Compatible)
+// ============================================================================
+
+export interface TranscriptionSegment {
+  id: number;
+  start: number;
+  end: number;
   text: string;
-  audioBase64: string;
-  sampleRate: number;
-  durationSeconds: number;
 }
 
 export interface TranscribeResponse {
-  modelId: string;
   text: string;
-  language: string;
+  // Verbose format additional fields
+  task?: string;
+  language?: string;
   duration?: number;
-  segments?: Array<{
-    start: number;
-    end: number;
-    text: string;
-  }>;
+  segments?: TranscriptionSegment[];
 }
 
+// ============================================================================
 // Caption Types
+// ============================================================================
+
 export interface CaptionResponse {
-  modelId: string;
+  id: string;
+  model: string;
   caption: string;
-  confidence: number;
+  confidence?: number;
   alternatives?: string[];
 }
 
 export interface VqaResponse {
-  modelId: string;
+  id: string;
+  model: string;
   question: string;
   answer: string;
-  confidence: number;
+  confidence?: number;
 }
 
+// ============================================================================
 // OCR Types
+// ============================================================================
+
 export interface BoundingBox {
   x: number;
   y: number;
@@ -176,61 +230,73 @@ export interface BoundingBox {
   height: number;
 }
 
-export interface OcrRegion {
+export interface OcrBlock {
   text: string;
   confidence: number;
   boundingBox?: BoundingBox;
 }
 
 export interface OcrResponse {
-  detectionModelId: string;
-  recognitionModelId: string;
+  id: string;
+  model: string;
   text: string;
-  regions: OcrRegion[];
+  blocks?: OcrBlock[];
 }
 
-export interface OcrDetectRegion {
-  confidence: number;
-  boundingBox: BoundingBox;
+export interface OcrLanguage {
+  code: string;
+  name?: string;
 }
 
-export interface OcrDetectResponse {
-  detectionModelId: string;
-  count: number;
-  regions: OcrDetectRegion[];
-}
-
+// ============================================================================
 // Detect Types
-export interface Detection {
-  classId: number;
+// ============================================================================
+
+export interface DetectedObject {
   label: string;
   confidence: number;
-  boundingBox: BoundingBox;
+  bounding_box: BoundingBox;
 }
 
 export interface DetectResponse {
-  modelId: string;
-  count: number;
-  detections: Detection[];
+  id: string;
+  model: string;
+  objects: DetectedObject[];
 }
 
+export interface DetectionLabel {
+  id: number;
+  name: string;
+}
+
+// ============================================================================
 // Segment Types
-export interface SegmentClass {
-  classId: number;
-  label: string;
-  pixelCount: number;
-  percentage: number;
+// ============================================================================
+
+export interface Segment {
+  id: number;
+  label?: string;
+  score?: number;
+  bounding_box?: BoundingBox;
+  maskBase64?: string;
 }
 
 export interface SegmentResponse {
-  modelId: string;
-  width: number;
-  height: number;
-  numClasses: number;
-  topClasses: SegmentClass[];
+  id: string;
+  model: string;
+  segments: Segment[];
+  maskBase64?: string;
 }
 
+export interface SegmentLabel {
+  id: number;
+  name: string;
+}
+
+// ============================================================================
 // Translate Types
+// ============================================================================
+
 export interface TranslateRequest {
   modelId: string;
   text?: string;
@@ -240,18 +306,22 @@ export interface TranslateRequest {
 }
 
 export interface TranslationResult {
-  index?: number;
-  sourceText: string;
-  translatedText: string;
-  sourceLanguage: string;
-  targetLanguage: string;
+  index: number;
+  source_text: string;
+  translated_text: string;
+  source_language?: string;
+  target_language?: string;
 }
 
 export interface TranslateResponse {
-  modelId: string;
-  sourceText?: string;
-  translatedText?: string;
-  sourceLanguage?: string;
-  targetLanguage?: string;
-  translations?: TranslationResult[];
+  id: string;
+  model: string;
+  translations: TranslationResult[];
+}
+
+export interface TranslateLanguage {
+  id: string;
+  alias: string;
+  source: string;
+  target: string;
 }

@@ -34,13 +34,13 @@ export function Detect() {
   };
 
   // Group detections by label
-  const groupedDetections = result?.detections.reduce((acc, det) => {
+  const groupedDetections = result?.objects.reduce((acc, det) => {
     if (!acc[det.label]) {
       acc[det.label] = [];
     }
     acc[det.label].push(det);
     return acc;
-  }, {} as Record<string, typeof result.detections>) || {};
+  }, {} as Record<string, typeof result.objects>) || {};
 
   return (
     <div className="p-6 space-y-6">
@@ -121,11 +121,11 @@ export function Detect() {
         <div className="bg-card border border-border rounded-lg p-4 space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold">
-              Detected Objects ({result.count})
+              Detected Objects ({result.objects.length})
             </h2>
           </div>
 
-          {result.count === 0 ? (
+          {result.objects.length === 0 ? (
             <p className="text-muted-foreground">No objects detected above the confidence threshold.</p>
           ) : (
             <div className="space-y-4">
@@ -143,15 +143,15 @@ export function Detect() {
 
               {/* Detailed list */}
               <div className="space-y-2 max-h-96 overflow-auto">
-                {result.detections.map((det, i) => (
+                {result.objects.map((det, i) => (
                   <div key={i} className="flex items-center gap-4 p-2 bg-muted rounded">
                     <span className="font-medium w-24">{det.label}</span>
                     <span className="text-sm text-muted-foreground">
                       {(det.confidence * 100).toFixed(1)}%
                     </span>
                     <span className="text-xs text-muted-foreground ml-auto font-mono">
-                      Box: ({det.boundingBox.x.toFixed(0)}, {det.boundingBox.y.toFixed(0)})
-                      {det.boundingBox.width.toFixed(0)}x{det.boundingBox.height.toFixed(0)}
+                      Box: ({det.bounding_box.x.toFixed(0)}, {det.bounding_box.y.toFixed(0)})
+                      {det.bounding_box.width.toFixed(0)}x{det.bounding_box.height.toFixed(0)}
                     </span>
                   </div>
                 ))}

@@ -15,8 +15,13 @@ export default defineConfig({
   server: {
     port: 3000,
     proxy: {
-      // API 엔드포인트
+      // API 엔드포인트 (system, cache, download)
       '/api': {
+        target: 'http://localhost:5000',
+        changeOrigin: true
+      },
+      // OpenAI-compatible endpoints (chat, embed, audio, images, etc.)
+      '/v1': {
         target: 'http://localhost:5000',
         changeOrigin: true
       },

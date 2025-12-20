@@ -1,17 +1,10 @@
 import { useState, useEffect } from 'react';
 import { api } from '../api/client';
-import type { TranslateResponse } from '../api/types';
+import type { TranslateResponse, TranslateLanguage } from '../api/types';
 import { Loader2, ArrowRight } from 'lucide-react';
 
-interface TranslateModel {
-  alias: string;
-  repoId: string;
-  sourceLanguage: string;
-  targetLanguage: string;
-}
-
 export function Translate() {
-  const [models, setModels] = useState<TranslateModel[]>([]);
+  const [languages, setLanguages] = useState<TranslateLanguage[]>([]);
   const [modelId, setModelId] = useState('default');
   const [text, setText] = useState('');
   const [result, setResult] = useState<TranslateResponse | null>(null);
@@ -19,10 +12,10 @@ export function Translate() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api.getTranslateModels().then(setModels).catch(console.error);
+    api.getTranslateLanguages().then(setLanguages).catch(console.error);
   }, []);
 
-  const selectedModel = models.find((m) => m.alias === modelId);
+  const selectedModel = languages.find((m) => m.alias === modelId);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -54,10 +47,10 @@ export function Translate() {
             onChange={(e) => setModelId(e.target.value)}
             className="w-full max-w-md px-3 py-2 bg-muted border border-border rounded"
           >
-            {models.length > 0 ? (
-              models.map((m) => (
+            {languages.length > 0 ? (
+              languages.map((m) => (
                 <option key={m.alias} value={m.alias}>
-                  {m.alias} ({m.sourceLanguage} → {m.targetLanguage})
+                  {m.alias} ({m.source} → {m.target})
                 </option>
               ))
             ) : (
@@ -66,7 +59,7 @@ export function Translate() {
           </select>
           {selectedModel && (
             <p className="text-sm text-muted-foreground mt-1">
-              {selectedModel.sourceLanguage} → {selectedModel.targetLanguage}
+              {selectedModel.source} → {selectedModel.target}
             </p>
           )}
         </div>
@@ -75,7 +68,7 @@ export function Translate() {
           <div>
             <label className="block text-sm font-medium mb-1">
               Source Text
-              {selectedModel && ` (${selectedModel.sourceLanguage})`}
+              {selectedModel && ` (${selectedModel.source})`}
             </label>
             <textarea
               value={text}
@@ -88,15 +81,15 @@ export function Translate() {
           <div>
             <label className="block text-sm font-medium mb-1">
               Translation
-              {selectedModel && ` (${selectedModel.targetLanguage})`}
+              {selectedModel && ` (${selectedModel.target})`}
             </label>
             <div className="w-full h-48 px-3 py-2 bg-muted border border-border rounded overflow-auto">
               {isLoading ? (
                 <div className="flex items-center justify-center h-full">
                   <Loader2 className="w-6 h-6 animate-spin text-primary" />
                 </div>
-              ) : result?.translatedText ? (
-                <p className="whitespace-pre-wrap">{result.translatedText}</p>
+              ) : result?.translations?.[0]?.translated_text ? (
+                <p className="whitespace-pre-wrap">{result.translations[0].translated_text}</p>
               ) : (
                 <p className="text-muted-foreground">Translation will appear here...</p>
               )}
@@ -127,9 +120,9 @@ export function Translate() {
       {result && (
         <div className="bg-card border border-border rounded-lg p-4">
           <div className="flex gap-4 text-sm text-muted-foreground">
-            <span>Model: {result.modelId}</span>
-            {result.sourceLanguage && <span>Source: {result.sourceLanguage}</span>}
-            {result.targetLanguage && <span>Target: {result.targetLanguage}</span>}
+            <span>Model: {result.model}</span>
+            {result.translations?.[0]?.source_language && <span>Source: {result.translations[0].source_language}</span>}
+            {result.translations?.[0]?.target_language && <span>Target: {result.translations[0].target_language}</span>}
           </div>
         </div>
       )}

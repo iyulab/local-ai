@@ -26,7 +26,7 @@ export function Rerank() {
         modelId,
         query,
         documents: docArray,
-        topK,
+        topN: topK,
       });
       setResults(response.results);
     } catch (err) {
@@ -112,10 +112,10 @@ export function Rerank() {
                 <div className="w-16 flex-shrink-0">
                   <span className="text-lg font-bold">#{i + 1}</span>
                   <p className="text-xs text-muted-foreground">
-                    Score: {result.score.toFixed(4)}
+                    Score: {result.relevance_score.toFixed(4)}
                   </p>
                 </div>
-                <p className="text-sm flex-1">{result.document}</p>
+                <p className="text-sm flex-1">{result.document?.text}</p>
               </div>
             ))}
           </div>

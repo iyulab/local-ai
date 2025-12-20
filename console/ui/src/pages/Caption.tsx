@@ -176,9 +176,11 @@ export function Caption() {
         <div className="bg-card border border-border rounded-lg p-4 space-y-2">
           <h2 className="text-lg font-semibold">Caption</h2>
           <p className="text-lg">{captionResult.caption}</p>
-          <p className="text-sm text-muted-foreground">
-            Confidence: {(captionResult.confidence * 100).toFixed(1)}%
-          </p>
+          {captionResult.confidence != null && (
+            <p className="text-sm text-muted-foreground">
+              Confidence: {(captionResult.confidence * 100).toFixed(1)}%
+            </p>
+          )}
           {captionResult.alternatives && captionResult.alternatives.length > 0 && (
             <div>
               <h3 className="text-sm font-medium mt-2">Alternatives:</h3>
@@ -197,9 +199,11 @@ export function Caption() {
           <h2 className="text-lg font-semibold">Answer</h2>
           <p className="text-sm text-muted-foreground">Q: {vqaResult.question}</p>
           <p className="text-lg">A: {vqaResult.answer}</p>
-          <p className="text-sm text-muted-foreground">
-            Confidence: {(vqaResult.confidence * 100).toFixed(1)}%
-          </p>
+          {vqaResult.confidence != null && (
+            <p className="text-sm text-muted-foreground">
+              Confidence: {(vqaResult.confidence * 100).toFixed(1)}%
+            </p>
+          )}
         </div>
       )}
     </div>

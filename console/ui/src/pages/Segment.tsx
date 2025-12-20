@@ -106,29 +106,29 @@ export function Segment() {
           <div>
             <h2 className="text-lg font-semibold mb-2">Segmentation Results</h2>
             <div className="flex gap-4 text-sm text-muted-foreground">
-              <span>Size: {result.width} x {result.height}</span>
-              <span>Classes: {result.numClasses}</span>
+              <span>Model: {result.model}</span>
+              <span>Classes: {result.segments.length}</span>
             </div>
           </div>
 
-          {result.topClasses && result.topClasses.length > 0 && (
+          {result.segments && result.segments.length > 0 && (
             <div>
               <h3 className="font-medium mb-3">Top Detected Classes</h3>
               <div className="space-y-2">
-                {result.topClasses.map((cls, i) => (
+                {result.segments.map((segment, i) => (
                   <div key={i} className="flex items-center gap-3">
                     <div className={`w-4 h-4 rounded ${getClassColor(i)}`} />
-                    <span className="font-medium w-32 truncate" title={cls.label}>
-                      {cls.label}
+                    <span className="font-medium w-32 truncate" title={segment.label ?? `Class ${segment.id}`}>
+                      {segment.label ?? `Class ${segment.id}`}
                     </span>
                     <div className="flex-1 bg-muted rounded-full h-2">
                       <div
                         className={`h-2 rounded-full ${getClassColor(i)}`}
-                        style={{ width: `${Math.min(cls.percentage, 100)}%` }}
+                        style={{ width: `${Math.min((segment.score ?? 0) * 100, 100)}%` }}
                       />
                     </div>
                     <span className="text-sm text-muted-foreground w-16 text-right">
-                      {cls.percentage.toFixed(1)}%
+                      {((segment.score ?? 0) * 100).toFixed(1)}%
                     </span>
                   </div>
                 ))}

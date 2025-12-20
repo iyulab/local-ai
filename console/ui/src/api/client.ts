@@ -14,10 +14,14 @@ import type {
   CaptionResponse,
   VqaResponse,
   OcrResponse,
+  OcrLanguage,
   DetectResponse,
+  DetectionLabel,
   SegmentResponse,
+  SegmentLabel,
   TranslateRequest,
   TranslateResponse,
+  TranslateLanguage,
 } from './types';
 
 const API_BASE = '/api';
@@ -34,30 +38,40 @@ async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({ message: response.statusText }));
-    throw new Error(error.message || error.detail || 'Request failed');
+    throw new Error(error.error?.message || error.message || error.detail || 'Request failed');
   }
 
   return response.json();
 }
 
 export const api = {
-  // System
+  // ============================================================================
+  // System Endpoints
+  // ============================================================================
+
   getSystemStatus: () => fetchJson<SystemStatusResponse>(`${API_BASE}/system/status`),
 
-  // Models (cache endpoints)
+  // ============================================================================
+  // Cache Management Endpoints
+  // ============================================================================
+
   getCachedModels: () => fetchJson<CachedModelsResponse>(`${API_BASE}/cache/models`),
+
   getLoadedModels: () => fetchJson<LoadedModelInfo[]>(`${API_BASE}/cache/loaded`),
+
   deleteModel: (repoId: string) =>
     fetch(`${API_BASE}/cache/models/${encodeURIComponent(repoId)}`, { method: 'DELETE' }),
 
-  // Unload model (not directly supported - use deleteModel to unload and remove)
+  // Note: Backend doesn't have a dedicated unload endpoint.
+  // Models are unloaded automatically when deleted or when memory pressure occurs.
   unloadModel: async (_key: string) => {
-    // The backend doesn't have a dedicated unload endpoint.
-    // Models are unloaded automatically when deleted or when memory pressure occurs.
     return new Response(null, { status: 501, statusText: 'Not Implemented' });
   },
 
-  // Model Check & Download
+  // ============================================================================
+  // Download Management Endpoints
+  // ============================================================================
+
   checkModel: (repoId: string) =>
     fetchJson<ModelCheckResult>(`${API_BASE}/download/check`, {
       method: 'POST',
@@ -105,7 +119,10 @@ export const api = {
     }
   },
 
-  // Chat (SSE streaming) - OpenAI compatible
+  // ============================================================================
+  // Chat Endpoints (OpenAI Compatible)
+  // ============================================================================
+
   chatStream: async function* (request: ChatRequest): AsyncGenerator<string> {
     const response = await fetch(`${V1_BASE}/chat/completions`, {
       method: 'POST',
@@ -116,11 +133,13 @@ export const api = {
         stream: true,
         max_tokens: request.options?.maxTokens,
         temperature: request.options?.temperature,
+        top_p: request.options?.topP,
       }),
     });
 
     if (!response.ok) {
-      throw new Error('Chat request failed');
+      const error = await response.json().catch(() => ({ message: 'Chat request failed' }));
+      throw new Error(error.error?.message || error.message || 'Chat request failed');
     }
 
     const reader = response.body?.getReader();
@@ -158,6 +177,7 @@ export const api = {
       id: string;
       model: string;
       choices: Array<{ message: { role: string; content: string } }>;
+      usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
     }>(`${V1_BASE}/chat/completions`, {
       method: 'POST',
       body: JSON.stringify({
@@ -166,15 +186,20 @@ export const api = {
         stream: false,
         max_tokens: request.options?.maxTokens,
         temperature: request.options?.temperature,
+        top_p: request.options?.topP,
       }),
     });
     return {
       modelId: response.model,
       response: response.choices[0]?.message?.content ?? '',
+      usage: response.usage,
     };
   },
 
-  // Embed - OpenAI compatible
+  // ============================================================================
+  // Embed Endpoints (OpenAI Compatible)
+  // ============================================================================
+
   embed: (request: EmbedRequest) =>
     fetchJson<EmbedResponse>(`${V1_BASE}/embeddings`, {
       method: 'POST',
@@ -184,7 +209,10 @@ export const api = {
       }),
     }),
 
-  // Rerank - Cohere compatible
+  // ============================================================================
+  // Rerank Endpoints (Cohere Compatible)
+  // ============================================================================
+
   rerank: (request: RerankRequest) =>
     fetchJson<RerankResponse>(`${V1_BASE}/rerank`, {
       method: 'POST',
@@ -192,11 +220,15 @@ export const api = {
         model: request.modelId,
         query: request.query,
         documents: request.documents,
-        top_n: request.topK,
+        top_n: request.topN,
+        return_documents: request.returnDocuments ?? true,
       }),
     }),
 
-  // Synthesize - OpenAI compatible
+  // ============================================================================
+  // Synthesize Endpoints (OpenAI Compatible)
+  // ============================================================================
+
   synthesize: async (request: SynthesizeRequest): Promise<Blob> => {
     const response = await fetch(`${V1_BASE}/audio/speech`, {
       method: 'POST',
@@ -204,22 +236,29 @@ export const api = {
       body: JSON.stringify({
         model: request.modelId,
         input: request.text,
-        response_format: 'wav',
+        voice: request.voice,
+        response_format: request.responseFormat ?? 'wav',
+        speed: request.speed,
       }),
     });
 
     if (!response.ok) {
-      throw new Error('Synthesis failed');
+      const error = await response.json().catch(() => ({ message: 'Synthesis failed' }));
+      throw new Error(error.error?.message || error.message || 'Synthesis failed');
     }
 
     return response.blob();
   },
 
-  // Transcribe - OpenAI compatible
-  transcribe: async (file: File, modelId: string = 'default'): Promise<TranscribeResponse> => {
+  // ============================================================================
+  // Transcribe Endpoints (OpenAI Compatible)
+  // ============================================================================
+
+  transcribe: async (file: File, modelId: string = 'default', responseFormat: string = 'json'): Promise<TranscribeResponse> => {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('model', modelId);
+    formData.append('response_format', responseFormat);
 
     const response = await fetch(`${V1_BASE}/audio/transcriptions`, {
       method: 'POST',
@@ -227,13 +266,17 @@ export const api = {
     });
 
     if (!response.ok) {
-      throw new Error('Transcription failed');
+      const error = await response.json().catch(() => ({ message: 'Transcription failed' }));
+      throw new Error(error.error?.message || error.message || 'Transcription failed');
     }
 
     return response.json();
   },
 
-  // Caption
+  // ============================================================================
+  // Caption Endpoints
+  // ============================================================================
+
   caption: async (file: File, modelId: string = 'default'): Promise<CaptionResponse> => {
     const formData = new FormData();
     formData.append('file', file);
@@ -245,7 +288,8 @@ export const api = {
     });
 
     if (!response.ok) {
-      throw new Error('Captioning failed');
+      const error = await response.json().catch(() => ({ message: 'Captioning failed' }));
+      throw new Error(error.error?.message || error.message || 'Captioning failed');
     }
 
     return response.json();
@@ -263,13 +307,17 @@ export const api = {
     });
 
     if (!response.ok) {
-      throw new Error('VQA failed');
+      const error = await response.json().catch(() => ({ message: 'VQA failed' }));
+      throw new Error(error.error?.message || error.message || 'VQA failed');
     }
 
     return response.json();
   },
 
-  // OCR
+  // ============================================================================
+  // OCR Endpoints
+  // ============================================================================
+
   ocr: async (file: File, language: string = 'en'): Promise<OcrResponse> => {
     const formData = new FormData();
     formData.append('file', file);
@@ -281,20 +329,27 @@ export const api = {
     });
 
     if (!response.ok) {
-      throw new Error('OCR failed');
+      const error = await response.json().catch(() => ({ message: 'OCR failed' }));
+      throw new Error(error.error?.message || error.message || 'OCR failed');
     }
 
     return response.json();
   },
 
-  getOcrLanguages: () => fetchJson<Array<{ code: string }>>(`${V1_BASE}/images/ocr/languages`),
+  getOcrLanguages: async (): Promise<OcrLanguage[]> => {
+    const response = await fetchJson<{ languages: OcrLanguage[] }>(`${V1_BASE}/images/ocr/languages`);
+    return response.languages;
+  },
 
-  // Detect
-  detect: async (file: File, modelId: string = 'default', confidenceThreshold: number = 0.5): Promise<DetectResponse> => {
+  // ============================================================================
+  // Detect Endpoints
+  // ============================================================================
+
+  detect: async (file: File, modelId: string = 'default', threshold: number = 0.5): Promise<DetectResponse> => {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('model', modelId);
-    formData.append('threshold', confidenceThreshold.toString());
+    formData.append('threshold', threshold.toString());
 
     const response = await fetch(`${V1_BASE}/images/detect`, {
       method: 'POST',
@@ -302,19 +357,27 @@ export const api = {
     });
 
     if (!response.ok) {
-      throw new Error('Detection failed');
+      const error = await response.json().catch(() => ({ message: 'Detection failed' }));
+      throw new Error(error.error?.message || error.message || 'Detection failed');
     }
 
     return response.json();
   },
 
-  getCocoLabels: () => fetchJson<Array<{ classId: number; label: string }>>(`${V1_BASE}/images/detect/labels`),
+  getDetectionLabels: async (): Promise<DetectionLabel[]> => {
+    const response = await fetchJson<{ labels: DetectionLabel[] }>(`${V1_BASE}/images/detect/labels`);
+    return response.labels;
+  },
 
-  // Segment
-  segment: async (file: File, modelId: string = 'default'): Promise<SegmentResponse> => {
+  // ============================================================================
+  // Segment Endpoints
+  // ============================================================================
+
+  segment: async (file: File, modelId: string = 'default', includeMask: boolean = false): Promise<SegmentResponse> => {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('model', modelId);
+    formData.append('include_mask', includeMask.toString());
 
     const response = await fetch(`${V1_BASE}/images/segment`, {
       method: 'POST',
@@ -322,13 +385,22 @@ export const api = {
     });
 
     if (!response.ok) {
-      throw new Error('Segmentation failed');
+      const error = await response.json().catch(() => ({ message: 'Segmentation failed' }));
+      throw new Error(error.error?.message || error.message || 'Segmentation failed');
     }
 
     return response.json();
   },
 
-  // Translate
+  getSegmentLabels: async (): Promise<SegmentLabel[]> => {
+    const response = await fetchJson<{ labels: SegmentLabel[] }>(`${V1_BASE}/images/segment/labels`);
+    return response.labels;
+  },
+
+  // ============================================================================
+  // Translate Endpoints
+  // ============================================================================
+
   translate: (request: TranslateRequest) =>
     fetchJson<TranslateResponse>(`${V1_BASE}/translate`, {
       method: 'POST',
@@ -340,15 +412,8 @@ export const api = {
       }),
     }),
 
-  getTranslateModels: async () => {
-    const response = await fetchJson<{
-      languages: Array<{ id: string; alias: string; source: string; target: string }>;
-    }>(`${V1_BASE}/translate/languages`);
-    return response.languages.map(l => ({
-      alias: l.alias,
-      repoId: l.id,
-      sourceLanguage: l.source,
-      targetLanguage: l.target,
-    }));
+  getTranslateLanguages: async (): Promise<TranslateLanguage[]> => {
+    const response = await fetchJson<{ languages: TranslateLanguage[] }>(`${V1_BASE}/translate/languages`);
+    return response.languages;
   },
 };

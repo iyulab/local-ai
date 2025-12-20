@@ -26,8 +26,8 @@ export function Embed() {
     try {
       const textArray = texts.split('\n').filter((t) => t.trim());
       const response = await api.embed({ modelId, texts: textArray });
-      setResult(response.embeddings);
-      setDimensions(response.dimensions);
+      setResult(response.data.map((d) => ({ index: d.index, embedding: d.embedding })));
+      setDimensions(response.data[0]?.embedding.length ?? 0);
     } catch (err) {
       setError((err as Error).message);
     } finally {

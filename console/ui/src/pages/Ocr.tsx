@@ -121,24 +121,23 @@ export function Ocr() {
           </div>
 
           <div className="flex gap-4 text-sm text-muted-foreground">
-            <span>Detection Model: {result.detectionModelId}</span>
-            <span>Recognition Model: {result.recognitionModelId}</span>
-            <span>Regions: {result.regions.length}</span>
+            <span>Model: {result.model}</span>
+            <span>Blocks: {result.blocks?.length ?? 0}</span>
           </div>
 
-          {result.regions.length > 0 && (
+          {result.blocks && result.blocks.length > 0 && (
             <div>
-              <h3 className="font-medium mb-2">Text Regions</h3>
+              <h3 className="font-medium mb-2">Text Blocks</h3>
               <div className="space-y-1 max-h-64 overflow-auto">
-                {result.regions.map((region, i) => (
+                {result.blocks.map((block, i) => (
                   <div key={i} className="flex gap-2 text-sm p-2 bg-muted rounded">
                     <span className="text-muted-foreground flex-shrink-0">
-                      [{(region.confidence * 100).toFixed(0)}%]
+                      [{(block.confidence * 100).toFixed(0)}%]
                     </span>
-                    <span className="font-mono">{region.text}</span>
-                    {region.boundingBox && (
+                    <span className="font-mono">{block.text}</span>
+                    {block.boundingBox && (
                       <span className="text-muted-foreground text-xs ml-auto">
-                        ({region.boundingBox.x}, {region.boundingBox.y}) {region.boundingBox.width}x{region.boundingBox.height}
+                        ({block.boundingBox.x}, {block.boundingBox.y}) {block.boundingBox.width}x{block.boundingBox.height}
                       </span>
                     )}
                   </div>
