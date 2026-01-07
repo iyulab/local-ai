@@ -29,7 +29,8 @@ public class ModelRegistryTests
         result.Should().BeTrue();
         modelInfo.Should().NotBeNull();
         modelInfo!.RepoId.Should().Be("monkt/paddleocr-onnx");
-        modelInfo.ModelFile.Should().Be("en_PP-OCRv3_det_infer.onnx");
+        modelInfo.ModelFile.Should().Be("det.onnx");
+        modelInfo.Subfolder.Should().Be("detection/v3");
     }
 
     [Fact]
@@ -131,8 +132,9 @@ public class ModelRegistryTests
         result.Should().BeTrue();
         modelInfo.Should().NotBeNull();
         modelInfo!.RepoId.Should().Be("monkt/paddleocr-onnx");
-        modelInfo.ModelFile.Should().Be("en_PP-OCRv3_rec_infer.onnx");
-        modelInfo.DictFile.Should().Be("en_dict.txt");
+        modelInfo.ModelFile.Should().Be("rec.onnx");
+        modelInfo.DictFile.Should().Be("dict.txt");
+        modelInfo.Subfolder.Should().Be("languages/english");
     }
 
     [Fact]
@@ -144,7 +146,8 @@ public class ModelRegistryTests
         // Assert
         result.Should().BeTrue();
         modelInfo.Should().NotBeNull();
-        modelInfo!.ModelFile.Should().Be("korean_PP-OCRv3_rec_infer.onnx");
+        modelInfo!.ModelFile.Should().Be("rec.onnx");
+        modelInfo.Subfolder.Should().Be("languages/korean");
         modelInfo.LanguageCodes.Should().Contain("ko");
     }
 
@@ -211,7 +214,6 @@ public class ModelRegistryTests
         models.Should().Contain("crnn-en-v3");
         models.Should().Contain("crnn-korean-v3");
         models.Should().Contain("crnn-chinese-v3");
-        models.Should().Contain("crnn-japan-v3");
     }
 
     [Fact]
@@ -224,7 +226,6 @@ public class ModelRegistryTests
         languages.Should().Contain("en");
         languages.Should().Contain("ko");
         languages.Should().Contain("zh");
-        languages.Should().Contain("ja");
         languages.Should().Contain("ar");
         languages.Should().Contain("ru");
     }

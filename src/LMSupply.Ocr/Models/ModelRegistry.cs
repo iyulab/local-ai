@@ -16,81 +16,148 @@ public static class ModelRegistry
     static ModelRegistry()
     {
         // Register default PaddleOCR v3 detection model
+        // Repository structure: detection/v3/det.onnx
         RegisterDetectionModel(new DetectionModelInfo(
             RepoId: DefaultRepoId,
             Alias: "dbnet-v3",
             DisplayName: "PaddleOCR v3 Detection (DBNet)",
-            ModelFile: "en_PP-OCRv3_det_infer.onnx",
+            ModelFile: "det.onnx",
             InputWidth: 960,
-            InputHeight: 960));
+            InputHeight: 960)
+        {
+            Subfolder = "detection/v3"
+        });
 
         // Register default detection alias
         RegisterDetectionAlias("default", "dbnet-v3");
 
-        // Register PaddleOCR v3 recognition models by language
+        // Register PaddleOCR recognition models by language
+        // Repository structure: languages/{lang}/rec.onnx, dict.txt
         RegisterRecognitionModel(new RecognitionModelInfo(
             RepoId: DefaultRepoId,
             Alias: "crnn-en-v3",
-            DisplayName: "PaddleOCR v3 English Recognition",
-            ModelFile: "en_PP-OCRv3_rec_infer.onnx",
-            DictFile: "en_dict.txt",
-            LanguageCodes: ["en"]));
+            DisplayName: "PaddleOCR English Recognition",
+            ModelFile: "rec.onnx",
+            DictFile: "dict.txt",
+            LanguageCodes: ["en"])
+        {
+            Subfolder = "languages/english"
+        });
 
         RegisterRecognitionModel(new RecognitionModelInfo(
             RepoId: DefaultRepoId,
             Alias: "crnn-korean-v3",
-            DisplayName: "PaddleOCR v3 Korean Recognition",
-            ModelFile: "korean_PP-OCRv3_rec_infer.onnx",
-            DictFile: "korean_dict.txt",
-            LanguageCodes: ["ko"]));
+            DisplayName: "PaddleOCR Korean Recognition",
+            ModelFile: "rec.onnx",
+            DictFile: "dict.txt",
+            LanguageCodes: ["ko"])
+        {
+            Subfolder = "languages/korean"
+        });
 
         RegisterRecognitionModel(new RecognitionModelInfo(
             RepoId: DefaultRepoId,
             Alias: "crnn-chinese-v3",
-            DisplayName: "PaddleOCR v3 Chinese Recognition",
-            ModelFile: "ch_PP-OCRv3_rec_infer.onnx",
-            DictFile: "chinese_cht_dict.txt",
-            LanguageCodes: ["zh", "zh-cn", "zh-tw"]));
+            DisplayName: "PaddleOCR Chinese Recognition",
+            ModelFile: "rec.onnx",
+            DictFile: "dict.txt",
+            LanguageCodes: ["zh", "zh-cn", "zh-tw"])
+        {
+            Subfolder = "languages/chinese"
+        });
 
-        RegisterRecognitionModel(new RecognitionModelInfo(
-            RepoId: DefaultRepoId,
-            Alias: "crnn-japan-v3",
-            DisplayName: "PaddleOCR v3 Japanese Recognition",
-            ModelFile: "japan_PP-OCRv3_rec_infer.onnx",
-            DictFile: "japan_dict.txt",
-            LanguageCodes: ["ja"]));
+        // Note: Japanese is not available in monkt/paddleocr-onnx repository
+        // Japanese language code will fall back to English recognition
+        // TODO: Find alternative Japanese OCR model or add to repository
 
         RegisterRecognitionModel(new RecognitionModelInfo(
             RepoId: DefaultRepoId,
             Alias: "crnn-latin-v3",
-            DisplayName: "PaddleOCR v3 Latin Recognition",
-            ModelFile: "latin_PP-OCRv3_rec_infer.onnx",
-            DictFile: "latin_dict.txt",
-            LanguageCodes: ["la", "es", "fr", "de", "it", "pt", "nl", "pl", "ro", "cs", "sv", "da", "no", "fi"]));
+            DisplayName: "PaddleOCR Latin Recognition",
+            ModelFile: "rec.onnx",
+            DictFile: "dict.txt",
+            LanguageCodes: ["la", "es", "fr", "de", "it", "pt", "nl", "pl", "ro", "cs", "sv", "da", "no", "fi"])
+        {
+            Subfolder = "languages/latin"
+        });
 
         RegisterRecognitionModel(new RecognitionModelInfo(
             RepoId: DefaultRepoId,
             Alias: "crnn-arabic-v3",
-            DisplayName: "PaddleOCR v3 Arabic Recognition",
-            ModelFile: "arabic_PP-OCRv3_rec_infer.onnx",
-            DictFile: "arabic_dict.txt",
-            LanguageCodes: ["ar"]));
+            DisplayName: "PaddleOCR Arabic Recognition",
+            ModelFile: "rec.onnx",
+            DictFile: "dict.txt",
+            LanguageCodes: ["ar", "ur", "fa"])
+        {
+            Subfolder = "languages/arabic"
+        });
 
         RegisterRecognitionModel(new RecognitionModelInfo(
             RepoId: DefaultRepoId,
             Alias: "crnn-cyrillic-v3",
-            DisplayName: "PaddleOCR v3 Cyrillic Recognition",
-            ModelFile: "cyrillic_PP-OCRv3_rec_infer.onnx",
-            DictFile: "cyrillic_dict.txt",
-            LanguageCodes: ["ru", "uk", "bg", "be", "sr", "mk"]));
+            DisplayName: "PaddleOCR Cyrillic/Slavic Recognition",
+            ModelFile: "rec.onnx",
+            DictFile: "dict.txt",
+            LanguageCodes: ["ru", "uk", "bg", "be", "sr", "mk"])
+        {
+            Subfolder = "languages/eslav"
+        });
 
         RegisterRecognitionModel(new RecognitionModelInfo(
             RepoId: DefaultRepoId,
             Alias: "crnn-devanagari-v3",
-            DisplayName: "PaddleOCR v3 Devanagari Recognition",
-            ModelFile: "devanagari_PP-OCRv3_rec_infer.onnx",
-            DictFile: "devanagari_dict.txt",
-            LanguageCodes: ["hi", "mr", "ne", "sa"]));
+            DisplayName: "PaddleOCR Devanagari Recognition",
+            ModelFile: "rec.onnx",
+            DictFile: "dict.txt",
+            LanguageCodes: ["hi", "mr", "ne", "sa"])
+        {
+            Subfolder = "languages/hindi"
+        });
+
+        // Additional language models available in monkt/paddleocr-onnx
+        RegisterRecognitionModel(new RecognitionModelInfo(
+            RepoId: DefaultRepoId,
+            Alias: "crnn-greek-v3",
+            DisplayName: "PaddleOCR Greek Recognition",
+            ModelFile: "rec.onnx",
+            DictFile: "dict.txt",
+            LanguageCodes: ["el"])
+        {
+            Subfolder = "languages/greek"
+        });
+
+        RegisterRecognitionModel(new RecognitionModelInfo(
+            RepoId: DefaultRepoId,
+            Alias: "crnn-thai-v3",
+            DisplayName: "PaddleOCR Thai Recognition",
+            ModelFile: "rec.onnx",
+            DictFile: "dict.txt",
+            LanguageCodes: ["th"])
+        {
+            Subfolder = "languages/thai"
+        });
+
+        RegisterRecognitionModel(new RecognitionModelInfo(
+            RepoId: DefaultRepoId,
+            Alias: "crnn-tamil-v3",
+            DisplayName: "PaddleOCR Tamil Recognition",
+            ModelFile: "rec.onnx",
+            DictFile: "dict.txt",
+            LanguageCodes: ["ta"])
+        {
+            Subfolder = "languages/tamil"
+        });
+
+        RegisterRecognitionModel(new RecognitionModelInfo(
+            RepoId: DefaultRepoId,
+            Alias: "crnn-telugu-v3",
+            DisplayName: "PaddleOCR Telugu Recognition",
+            ModelFile: "rec.onnx",
+            DictFile: "dict.txt",
+            LanguageCodes: ["te"])
+        {
+            Subfolder = "languages/telugu"
+        });
 
         // Register language to recognition model mappings
         foreach (var model in RecognitionModels.Values.DistinctBy(m => m.Alias))
