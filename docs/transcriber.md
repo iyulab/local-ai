@@ -179,10 +179,16 @@ foreach (var model in LocalTranscriber.GetAllModels())
 
 ### Load by HuggingFace ID
 
+You can use any Whisper ONNX model from HuggingFace by its full ID:
+
 ```csharp
-// Load specific ONNX model from HuggingFace
+// Use any Whisper ONNX model from HuggingFace
 var transcriber = await LocalTranscriber.LoadAsync("onnx-community/whisper-small");
+var transcriber = await LocalTranscriber.LoadAsync("openai/whisper-base");
+var transcriber = await LocalTranscriber.LoadAsync("distil-whisper/distil-small.en");
 ```
+
+The model repository must contain ONNX files (`encoder.onnx`, `decoder.onnx`) in the `onnx/` subfolder.
 
 ## Audio Format Support
 

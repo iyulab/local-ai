@@ -48,6 +48,13 @@ var result = await captioner.CaptionAsync(stream);
 | `smolvlm` | SmolVLM-256M | ~600MB | Lightweight multimodal model |
 | `florence2` | Florence-2-base | ~500MB | Multi-task vision model |
 
+You can also use any HuggingFace vision-language model by its full ID:
+
+```csharp
+// Use any ONNX captioning model from HuggingFace
+var captioner = await LocalCaptioner.LoadAsync("Xenova/vit-gpt2-image-captioning");
+```
+
 ## Advanced Usage
 
 ### Custom Options

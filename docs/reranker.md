@@ -73,6 +73,14 @@ Output:
 | `multilingual` | BAAI/bge-reranker-v2-m3 | 8192 | ~1.1GB | 100+ languages, long context |
 | `bge-base` | BAAI/bge-reranker-base | 512 | ~440MB | Good multilingual |
 
+You can also use any HuggingFace cross-encoder model by its full ID:
+
+```csharp
+// Use any cross-encoder from HuggingFace
+var reranker = await LocalReranker.LoadAsync("cross-encoder/ms-marco-MiniLM-L-12-v2");
+var reranker = await LocalReranker.LoadAsync("BAAI/bge-reranker-large");
+```
+
 ## Configuration Options
 
 ```csharp

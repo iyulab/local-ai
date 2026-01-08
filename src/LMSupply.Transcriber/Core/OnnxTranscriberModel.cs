@@ -333,6 +333,7 @@ internal sealed class OnnxTranscriberModel : ITranscriberModel
 
         var modelPath = await downloader.DownloadModelAsync(
             _modelInfo.Id,
+            files: [_modelInfo.EncoderFile, _modelInfo.DecoderFile],
             subfolder: "onnx",
             cancellationToken: cancellationToken);
 

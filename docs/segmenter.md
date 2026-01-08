@@ -52,6 +52,13 @@ Console.WriteLine($"Class at (100,100): {segmenter.ClassLabels[classId]}");
 
 All semantic segmentation models are trained on ADE20K (150 classes) with MIT license.
 
+You can also use any HuggingFace segmentation model by its full ID:
+
+```csharp
+// Use any ONNX segmentation model from HuggingFace
+var segmenter = await LocalSegmenter.LoadAsync("nvidia/segformer-b0-finetuned-ade-512-512");
+```
+
 ## Advanced Usage
 
 ### Custom Options

@@ -72,6 +72,18 @@ public sealed class NativeLoader : IDisposable
     /// <param name="directory">The directory containing native libraries.</param>
     public void RegisterDirectory(string directory)
     {
+        RegisterDirectory(directory, preload: false);
+    }
+
+    /// <summary>
+    /// Registers a directory containing native libraries and optionally pre-loads them.
+    /// Pre-loading ensures DLLs are available before any managed code tries to use them via DllImport.
+    /// </summary>
+    /// <param name="directory">The directory containing native libraries.</param>
+    /// <param name="preload">If true, immediately loads all native libraries into memory.</param>
+    /// <param name="primaryLibrary">Optional name of the primary library to load first (e.g., "onnxruntime").</param>
+    public void RegisterDirectory(string directory, bool preload, string? primaryLibrary = null)
+    {
         ArgumentException.ThrowIfNullOrEmpty(directory);
 
         if (!Directory.Exists(directory))
@@ -80,6 +92,7 @@ public sealed class NativeLoader : IDisposable
         lock (_lock)
         {
             var extensions = GetNativeLibraryExtensions();
+            var libraries = new List<(string name, string path)>();
 
             foreach (var file in Directory.EnumerateFiles(directory))
             {
@@ -89,8 +102,48 @@ public sealed class NativeLoader : IDisposable
                     var fileName = Path.GetFileName(file);
                     var libraryName = GetLibraryNameFromFileName(fileName);
                     RegisterLibrary(libraryName, file);
+                    libraries.Add((libraryName, file));
                 }
             }
+
+            if (preload && libraries.Count > 0)
+            {
+                // Load primary library first if specified
+                if (!string.IsNullOrEmpty(primaryLibrary))
+                {
+                    var primary = libraries.FirstOrDefault(l =>
+                        l.name.Equals(primaryLibrary, StringComparison.OrdinalIgnoreCase) ||
+                        l.name.Contains(primaryLibrary, StringComparison.OrdinalIgnoreCase));
+
+                    if (primary.path is not null)
+                    {
+                        PreloadLibrary(primary.name, primary.path);
+                    }
+                }
+
+                // Load all other libraries
+                foreach (var (name, path) in libraries)
+                {
+                    PreloadLibrary(name, path);
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Pre-loads a native library into memory.
+    /// </summary>
+    private void PreloadLibrary(string libraryName, string libraryPath)
+    {
+        var normalizedName = NormalizeLibraryName(libraryName);
+
+        // Skip if already loaded
+        if (_loadedLibraries.ContainsKey(normalizedName))
+            return;
+
+        if (NativeLibrary.TryLoad(libraryPath, out var handle))
+        {
+            _loadedLibraries[normalizedName] = handle;
         }
     }
 

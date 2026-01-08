@@ -41,7 +41,7 @@ public class GeneratorIntegrationTests
         model.ModelId.Should().Be(Phi35Model);
 
         var info = model.GetModelInfo();
-        info.ExecutionProvider.Should().Contain("DML");
+        info.ExecutionProvider.Should().Be("DirectML");
 
         // Act - Generate
         var result = await model.GenerateCompleteAsync(
@@ -123,7 +123,7 @@ public class GeneratorIntegrationTests
         model.ModelId.Should().Be(Phi4Model);
 
         var info = model.GetModelInfo();
-        info.ExecutionProvider.Should().Contain("DML");
+        info.ExecutionProvider.Should().Be("DirectML");
 
         // Act - Generate
         var result = await model.GenerateCompleteAsync(

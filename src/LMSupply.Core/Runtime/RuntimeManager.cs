@@ -133,8 +133,8 @@ public sealed class RuntimeManager : IAsyncDisposable
         var cachedPath = await _cache.GetCachedPathAsync(package, actualVersion, rid, actualProvider, cancellationToken);
         if (cachedPath is not null)
         {
-            // Register with native loader
-            NativeLoader.Instance.RegisterDirectory(Path.GetDirectoryName(cachedPath)!);
+            // Register with native loader and pre-load the DLL
+            NativeLoader.Instance.RegisterDirectory(Path.GetDirectoryName(cachedPath)!, preload: true, primaryLibrary: package);
             return Path.GetDirectoryName(cachedPath)!;
         }
 
@@ -164,8 +164,8 @@ public sealed class RuntimeManager : IAsyncDisposable
             // Register in cache
             await _cache.RegisterAsync(entry, package, actualVersion, binaryPath, cancellationToken);
 
-            // Register with native loader
-            NativeLoader.Instance.RegisterDirectory(targetDirectory);
+            // Register with native loader and pre-load the DLL
+            NativeLoader.Instance.RegisterDirectory(targetDirectory, preload: true, primaryLibrary: package);
 
             return targetDirectory;
         }
@@ -180,7 +180,7 @@ public sealed class RuntimeManager : IAsyncDisposable
             var cpuBinaryPath = await _downloader.DownloadAsync(cpuEntry, cpuTargetDirectory, progress, cancellationToken);
 
             await _cache.RegisterAsync(cpuEntry, package, actualVersion, cpuBinaryPath, cancellationToken);
-            NativeLoader.Instance.RegisterDirectory(cpuTargetDirectory);
+            NativeLoader.Instance.RegisterDirectory(cpuTargetDirectory, preload: true, primaryLibrary: package);
 
             return cpuTargetDirectory;
         }

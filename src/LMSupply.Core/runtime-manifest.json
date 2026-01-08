@@ -1,11 +1,83 @@
 {
   "version": "1.0.0",
-  "updated": "2024-12-13T00:00:00Z",
+  "updated": "2025-01-08T00:00:00Z",
   "packages": {
     "onnxruntime": {
       "description": "ONNX Runtime for cross-platform machine learning inference",
       "homepage": "https://onnxruntime.ai",
       "versions": {
+        "1.23.2": {
+          "released": "2025-01-06T00:00:00Z",
+          "releaseNotes": "https://github.com/microsoft/onnxruntime/releases/tag/v1.23.2",
+          "binaries": [
+            {
+              "rid": "win-x64",
+              "provider": "cpu",
+              "url": "https://github.com/microsoft/onnxruntime/releases/download/v1.23.2/onnxruntime-win-x64-1.23.2.zip",
+              "fileName": "onnxruntime.dll",
+              "size": 16777216,
+              "sha256": "placeholder-will-be-updated"
+            },
+            {
+              "rid": "win-x64",
+              "provider": "cuda12",
+              "url": "https://github.com/microsoft/onnxruntime/releases/download/v1.23.2/onnxruntime-win-x64-gpu-cuda12-1.23.2.zip",
+              "fileName": "onnxruntime.dll",
+              "size": 220000000,
+              "sha256": "placeholder-will-be-updated",
+              "dependencies": ["onnxruntime_providers_cuda.dll", "onnxruntime_providers_shared.dll"]
+            },
+            {
+              "rid": "linux-x64",
+              "provider": "cpu",
+              "url": "https://github.com/microsoft/onnxruntime/releases/download/v1.23.2/onnxruntime-linux-x64-1.23.2.tgz",
+              "fileName": "libonnxruntime.so.1.23.2",
+              "size": 15000000,
+              "sha256": "placeholder-will-be-updated"
+            },
+            {
+              "rid": "linux-x64",
+              "provider": "cuda12",
+              "url": "https://github.com/microsoft/onnxruntime/releases/download/v1.23.2/onnxruntime-linux-x64-gpu-cuda12-1.23.2.tgz",
+              "fileName": "libonnxruntime.so.1.23.2",
+              "size": 210000000,
+              "sha256": "placeholder-will-be-updated",
+              "dependencies": ["libonnxruntime_providers_cuda.so", "libonnxruntime_providers_shared.so"]
+            },
+            {
+              "rid": "osx-arm64",
+              "provider": "cpu",
+              "url": "https://github.com/microsoft/onnxruntime/releases/download/v1.23.2/onnxruntime-osx-arm64-1.23.2.tgz",
+              "fileName": "libonnxruntime.1.23.2.dylib",
+              "size": 11000000,
+              "sha256": "placeholder-will-be-updated"
+            },
+            {
+              "rid": "osx-x64",
+              "provider": "cpu",
+              "url": "https://github.com/microsoft/onnxruntime/releases/download/v1.23.2/onnxruntime-osx-x64-1.23.2.tgz",
+              "fileName": "libonnxruntime.1.23.2.dylib",
+              "size": 13000000,
+              "sha256": "placeholder-will-be-updated"
+            },
+            {
+              "rid": "linux-arm64",
+              "provider": "cpu",
+              "url": "https://github.com/microsoft/onnxruntime/releases/download/v1.23.2/onnxruntime-linux-aarch64-1.23.2.tgz",
+              "fileName": "libonnxruntime.so.1.23.2",
+              "size": 12000000,
+              "sha256": "placeholder-will-be-updated"
+            },
+            {
+              "rid": "win-arm64",
+              "provider": "cpu",
+              "url": "https://github.com/microsoft/onnxruntime/releases/download/v1.23.2/onnxruntime-win-arm64-1.23.2.zip",
+              "fileName": "onnxruntime.dll",
+              "size": 10000000,
+              "sha256": "placeholder-will-be-updated"
+            }
+          ]
+        },
         "1.20.1": {
           "released": "2024-11-15T00:00:00Z",
           "releaseNotes": "https://github.com/microsoft/onnxruntime/releases/tag/v1.20.1",

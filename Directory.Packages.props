@@ -13,6 +13,7 @@
 
     <!-- Vision Dependencies -->
     <PackageVersion Include="SixLabors.ImageSharp" Version="3.1.12" />
+    <PackageVersion Include="SixLabors.ImageSharp.Drawing" Version="2.1.5" />
 
     <!-- Audio Dependencies -->
     <PackageVersion Include="NAudio" Version="2.2.1" />

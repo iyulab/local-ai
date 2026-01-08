@@ -55,6 +55,13 @@ foreach (var detection in results)
 
 All models use Apache-2.0 license and support 80 COCO classes.
 
+You can also use any HuggingFace object detection model by its full ID:
+
+```csharp
+// Use any ONNX detection model from HuggingFace
+var detector = await LocalDetector.LoadAsync("PekingU/rtdetr_r18vd");
+```
+
 ## Advanced Usage
 
 ### Custom Options

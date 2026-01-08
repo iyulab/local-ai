@@ -122,6 +122,7 @@ public static class LocalOcr
 
             var modelDir = await downloader.DownloadModelAsync(
                 knownModel.RepoId,
+                files: [knownModel.ModelFile],
                 subfolder: knownModel.Subfolder,
                 progress: progress,
                 cancellationToken: cancellationToken).ConfigureAwait(false);
@@ -138,8 +139,15 @@ public static class LocalOcr
             return (knownModel, modelPath);
         }
 
+        // Check if it's a HuggingFace repo ID (contains '/')
+        if (modelIdOrPath.Contains('/'))
+        {
+            return await ResolveHuggingFaceDetectionModelAsync(
+                modelIdOrPath, options, progress, cancellationToken).ConfigureAwait(false);
+        }
+
         throw new ModelNotFoundException(
-            $"Unknown detection model '{modelIdOrPath}'. Use GetAvailableDetectionModels() to list available models.",
+            $"Unknown detection model '{modelIdOrPath}'. Use GetAvailableDetectionModels() to list available models, or provide a HuggingFace repo ID.",
             modelIdOrPath);
     }
 
@@ -177,6 +185,7 @@ public static class LocalOcr
 
             var modelDir = await downloader.DownloadModelAsync(
                 knownModel.RepoId,
+                files: [knownModel.ModelFile, knownModel.DictFile],
                 subfolder: knownModel.Subfolder,
                 progress: progress,
                 cancellationToken: cancellationToken).ConfigureAwait(false);
@@ -201,8 +210,205 @@ public static class LocalOcr
             return (knownModel, modelPath, dictPath);
         }
 
+        // Check if it's a HuggingFace repo ID (contains '/')
+        if (modelIdOrPath.Contains('/'))
+        {
+            return await ResolveHuggingFaceRecognitionModelAsync(
+                modelIdOrPath, options, progress, cancellationToken).ConfigureAwait(false);
+        }
+
         throw new ModelNotFoundException(
-            $"Unknown recognition model '{modelIdOrPath}'. Use GetAvailableRecognitionModels() to list available models.",
+            $"Unknown recognition model '{modelIdOrPath}'. Use GetAvailableRecognitionModels() to list available models, or provide a HuggingFace repo ID.",
             modelIdOrPath);
+    }
+
+    /// <summary>
+    /// Resolves a detection model from a HuggingFace repository.
+    /// Searches for common detection model patterns (det.onnx, detection.onnx, etc.)
+    /// </summary>
+    private static async Task<(DetectionModelInfo info, string modelPath)> ResolveHuggingFaceDetectionModelAsync(
+        string repoId,
+        OcrOptions options,
+        IProgress<DownloadProgress>? progress,
+        CancellationToken cancellationToken)
+    {
+        var cacheDir = options.CacheDirectory ?? CacheManager.GetDefaultCacheDirectory();
+        using var downloader = new HuggingFaceDownloader(cacheDir);
+
+        // Common detection model file patterns
+        string[] detectionPatterns = ["det.onnx", "detection.onnx", "text_detection.onnx", "detector.onnx"];
+        string[] subfolderPatterns = ["", "detection", "detection/v5", "detection/v3", "onnx"];
+
+        string? modelPath = null;
+        string? foundSubfolder = null;
+
+        // Try to find detection model
+        foreach (var subfolder in subfolderPatterns)
+        {
+            foreach (var pattern in detectionPatterns)
+            {
+                try
+                {
+                    var modelDir = await downloader.DownloadModelAsync(
+                        repoId,
+                        files: [pattern],
+                        subfolder: string.IsNullOrEmpty(subfolder) ? null : subfolder,
+                        progress: progress,
+                        cancellationToken: cancellationToken).ConfigureAwait(false);
+
+                    var candidatePath = Path.Combine(modelDir, pattern);
+                    if (File.Exists(candidatePath))
+                    {
+                        modelPath = candidatePath;
+                        foundSubfolder = subfolder;
+                        break;
+                    }
+                }
+                catch
+                {
+                    // File not found, try next pattern
+                }
+            }
+            if (modelPath != null) break;
+        }
+
+        if (modelPath == null)
+        {
+            throw new ModelNotFoundException(
+                $"No detection model found in HuggingFace repository '{repoId}'. " +
+                $"Expected one of: {string.Join(", ", detectionPatterns)}",
+                repoId);
+        }
+
+        // Create model info for the discovered model
+        var modelInfo = new DetectionModelInfo(
+            RepoId: repoId,
+            Alias: repoId,
+            DisplayName: $"HuggingFace: {repoId}",
+            ModelFile: Path.GetFileName(modelPath),
+            InputWidth: 960,
+            InputHeight: 960)
+        {
+            Subfolder = foundSubfolder
+        };
+
+        return (modelInfo, modelPath);
+    }
+
+    /// <summary>
+    /// Resolves a recognition model from a HuggingFace repository.
+    /// Searches for common recognition model patterns (rec.onnx, recognition.onnx, etc.)
+    /// </summary>
+    private static async Task<(RecognitionModelInfo info, string modelPath, string dictPath)> ResolveHuggingFaceRecognitionModelAsync(
+        string repoId,
+        OcrOptions options,
+        IProgress<DownloadProgress>? progress,
+        CancellationToken cancellationToken)
+    {
+        var cacheDir = options.CacheDirectory ?? CacheManager.GetDefaultCacheDirectory();
+        using var downloader = new HuggingFaceDownloader(cacheDir);
+
+        // Parse repo ID for language hint (e.g., "org/paddleocr-japanese" -> try japanese subfolder)
+        var repoName = repoId.Split('/').Last().ToLowerInvariant();
+
+        // Common recognition model file patterns
+        string[] recognitionPatterns = ["rec.onnx", "recognition.onnx", "text_recognition.onnx", "recognizer.onnx"];
+        string[] dictPatterns = ["dict.txt", "dictionary.txt", "keys.txt", "vocab.txt"];
+
+        // Build subfolder patterns based on language hint
+        var subfolderPatterns = new List<string> { "" };
+        if (options.LanguageHint != null)
+        {
+            var langSubfolders = GetLanguageSubfolders(options.LanguageHint);
+            subfolderPatterns.InsertRange(0, langSubfolders);
+        }
+        subfolderPatterns.AddRange(["languages/english", "languages/latin", "onnx", "recognition"]);
+
+        string? modelPath = null;
+        string? dictPath = null;
+        string? foundSubfolder = null;
+
+        // Try to find recognition model and dictionary
+        foreach (var subfolder in subfolderPatterns.Distinct())
+        {
+            foreach (var recPattern in recognitionPatterns)
+            {
+                foreach (var dictPattern in dictPatterns)
+                {
+                    try
+                    {
+                        var modelDir = await downloader.DownloadModelAsync(
+                            repoId,
+                            files: [recPattern, dictPattern],
+                            subfolder: string.IsNullOrEmpty(subfolder) ? null : subfolder,
+                            progress: progress,
+                            cancellationToken: cancellationToken).ConfigureAwait(false);
+
+                        var candidateModelPath = Path.Combine(modelDir, recPattern);
+                        var candidateDictPath = Path.Combine(modelDir, dictPattern);
+
+                        if (File.Exists(candidateModelPath) && File.Exists(candidateDictPath))
+                        {
+                            modelPath = candidateModelPath;
+                            dictPath = candidateDictPath;
+                            foundSubfolder = subfolder;
+                            break;
+                        }
+                    }
+                    catch
+                    {
+                        // Files not found, try next pattern
+                    }
+                }
+                if (modelPath != null) break;
+            }
+            if (modelPath != null) break;
+        }
+
+        if (modelPath == null || dictPath == null)
+        {
+            throw new ModelNotFoundException(
+                $"No recognition model found in HuggingFace repository '{repoId}'. " +
+                $"Expected model file ({string.Join(", ", recognitionPatterns)}) and dictionary file ({string.Join(", ", dictPatterns)})",
+                repoId);
+        }
+
+        // Create model info for the discovered model
+        var modelInfo = new RecognitionModelInfo(
+            RepoId: repoId,
+            Alias: repoId,
+            DisplayName: $"HuggingFace: {repoId}",
+            ModelFile: Path.GetFileName(modelPath),
+            DictFile: Path.GetFileName(dictPath),
+            LanguageCodes: [options.LanguageHint ?? "en"])
+        {
+            Subfolder = foundSubfolder
+        };
+
+        return (modelInfo, modelPath, dictPath);
+    }
+
+    /// <summary>
+    /// Gets possible subfolder names for a language code.
+    /// </summary>
+    private static string[] GetLanguageSubfolders(string languageCode)
+    {
+        var lang = languageCode.ToLowerInvariant().Split('-')[0];
+        return lang switch
+        {
+            "en" => ["languages/english", "english", "en"],
+            "ko" => ["languages/korean", "korean", "ko"],
+            "zh" => ["languages/chinese", "chinese", "zh", "ch"],
+            "ja" => ["languages/japanese", "japanese", "ja", "japan"],
+            "ar" => ["languages/arabic", "arabic", "ar"],
+            "ru" => ["languages/cyrillic", "languages/eslav", "cyrillic", "russian", "ru"],
+            "de" or "fr" or "es" or "it" or "pt" => ["languages/latin", "latin"],
+            "hi" => ["languages/hindi", "languages/devanagari", "hindi", "devanagari"],
+            "th" => ["languages/thai", "thai", "th"],
+            "el" => ["languages/greek", "greek", "el"],
+            "ta" => ["languages/tamil", "tamil", "ta"],
+            "te" => ["languages/telugu", "telugu", "te"],
+            _ => [$"languages/{lang}", lang]
+        };
     }
 }

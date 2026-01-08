@@ -96,6 +96,39 @@ await using var ocr = await LocalOcr.LoadAsync(
 | `crnn-cyrillic-v3` | Russian, Ukrainian, Bulgarian, etc. | ~7MB |
 | `crnn-devanagari-v3` | Hindi, Marathi, Nepali, Sanskrit | ~7MB |
 
+You can also use any HuggingFace PaddleOCR-compatible model by its full repository ID:
+
+```csharp
+// Use any PaddleOCR-style ONNX model from HuggingFace
+// The model must have detection model (det.onnx) and recognition model (rec.onnx + dict.txt)
+
+// Using deepghs/paddleocr for additional language support
+await using var ocr = await LocalOcr.LoadAsync(
+    detectionModel: "deepghs/paddleocr",
+    recognitionModel: "deepghs/paddleocr",
+    options: new OcrOptions { LanguageHint = "ja" }  // Japanese
+);
+
+// Using a custom PaddleOCR ONNX repository
+await using var ocr = await LocalOcr.LoadAsync(
+    detectionModel: "your-org/custom-paddleocr",
+    recognitionModel: "your-org/custom-paddleocr"
+);
+```
+
+### HuggingFace Model Requirements
+
+For custom HuggingFace OCR repositories, the following file structure is expected:
+
+**Detection Model** (one of):
+- `det.onnx`, `detection.onnx`, `text_detection.onnx`, or `detector.onnx`
+- Can be in root or subfolders: `detection/`, `detection/v5/`, `onnx/`
+
+**Recognition Model** (both required):
+- Model file: `rec.onnx`, `recognition.onnx`, `text_recognition.onnx`, or `recognizer.onnx`
+- Dictionary file: `dict.txt`, `dictionary.txt`, `keys.txt`, or `vocab.txt`
+- Can be in language-specific subfolders: `languages/english/`, `languages/korean/`, etc.
+
 ## Configuration Options
 
 ```csharp

@@ -318,6 +318,14 @@ internal sealed class DbNetPostProcessor
         if (polygon.Count < 3)
             return polygon;
 
+        // Determine winding order (CW vs CCW) using signed area
+        // Positive area = CCW, Negative area = CW
+        var signedArea = CalculateSignedPolygonArea(polygon);
+
+        // If polygon is clockwise (negative area), negate distance to expand outward
+        // The normal calculation assumes CCW, so for CW polygons we need to reverse the direction
+        var effectiveDistance = signedArea < 0 ? -distance : distance;
+
         var result = new List<PointF>();
 
         for (var i = 0; i < polygon.Count; i++)
@@ -360,18 +368,36 @@ internal sealed class DbNetPostProcessor
 
             if (nlen < 1e-6f)
             {
-                result.Add(new PointF(curr.X + nx1 * distance, curr.Y + ny1 * distance));
+                result.Add(new PointF(curr.X + nx1 * effectiveDistance, curr.Y + ny1 * effectiveDistance));
             }
             else
             {
                 // Scale by the miter factor
                 var miter = 1.0f / (1.0f + nx1 * nx2 + ny1 * ny2);
                 miter = Math.Min(miter, 4.0f); // Limit miter factor
-                result.Add(new PointF(curr.X + nx / nlen * distance * miter, curr.Y + ny / nlen * distance * miter));
+                result.Add(new PointF(curr.X + nx / nlen * effectiveDistance * miter, curr.Y + ny / nlen * effectiveDistance * miter));
             }
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Calculates the signed area of a polygon.
+    /// Positive = counter-clockwise, Negative = clockwise.
+    /// </summary>
+    private static float CalculateSignedPolygonArea(List<PointF> polygon)
+    {
+        float area = 0;
+        var j = polygon.Count - 1;
+
+        for (var i = 0; i < polygon.Count; i++)
+        {
+            area += (polygon[j].X + polygon[i].X) * (polygon[j].Y - polygon[i].Y);
+            j = i;
+        }
+
+        return area / 2;
     }
 }
 
