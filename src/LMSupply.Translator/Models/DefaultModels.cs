@@ -3,6 +3,7 @@ namespace LMSupply.Translator.Models;
 /// <summary>
 /// Default translation model configurations.
 /// All models use Apache-2.0 or CC-BY-4.0 compatible licenses for commercial use.
+/// Models use onnx-community repos with auto-discovery enabled for ONNX files.
 /// </summary>
 public static class DefaultModels
 {
@@ -12,7 +13,7 @@ public static class DefaultModels
     /// </summary>
     public static TranslatorModelInfo OpusMtKoEn { get; } = new()
     {
-        Id = "Helsinki-NLP/opus-mt-ko-en",
+        Id = "onnx-community/opus-mt-ko-en",
         Alias = "default",
         DisplayName = "OPUS-MT Ko-En",
         Architecture = "MarianMT",
@@ -23,8 +24,7 @@ public static class DefaultModels
         BleuScore = 35.5f,
         MaxLength = 512,
         VocabSize = 65000,
-        EncoderFile = "encoder_model.onnx",
-        DecoderFile = "decoder_model.onnx",
+        // UseAutoDiscovery = true (default), encoder/decoder files auto-discovered
         TokenizerFile = "source.spm",
         Description = "Korean to English translation using OPUS-MT.",
         License = "Apache-2.0"
@@ -35,7 +35,7 @@ public static class DefaultModels
     /// </summary>
     public static TranslatorModelInfo OpusMtKoEnAlias { get; } = new()
     {
-        Id = "Helsinki-NLP/opus-mt-ko-en",
+        Id = "onnx-community/opus-mt-ko-en",
         Alias = "ko-en",
         DisplayName = "OPUS-MT Ko-En",
         Architecture = "MarianMT",
@@ -46,8 +46,7 @@ public static class DefaultModels
         BleuScore = 35.5f,
         MaxLength = 512,
         VocabSize = 65000,
-        EncoderFile = "encoder_model.onnx",
-        DecoderFile = "decoder_model.onnx",
+        // UseAutoDiscovery = true (default), encoder/decoder files auto-discovered
         TokenizerFile = "source.spm",
         Description = "Korean to English translation using OPUS-MT.",
         License = "Apache-2.0"
@@ -59,7 +58,7 @@ public static class DefaultModels
     /// </summary>
     public static TranslatorModelInfo OpusMtEnKo { get; } = new()
     {
-        Id = "Helsinki-NLP/opus-mt-en-ko",
+        Id = "onnx-community/opus-mt-en-ko",
         Alias = "en-ko",
         DisplayName = "OPUS-MT En-Ko",
         Architecture = "MarianMT",
@@ -70,8 +69,7 @@ public static class DefaultModels
         BleuScore = 28.0f,
         MaxLength = 512,
         VocabSize = 65000,
-        EncoderFile = "encoder_model.onnx",
-        DecoderFile = "decoder_model.onnx",
+        // UseAutoDiscovery = true (default), encoder/decoder files auto-discovered
         TokenizerFile = "source.spm",
         Description = "English to Korean translation using OPUS-MT.",
         License = "Apache-2.0"
@@ -83,7 +81,7 @@ public static class DefaultModels
     /// </summary>
     public static TranslatorModelInfo OpusMtJaEn { get; } = new()
     {
-        Id = "Helsinki-NLP/opus-mt-ja-en",
+        Id = "onnx-community/opus-mt-ja-en",
         Alias = "ja-en",
         DisplayName = "OPUS-MT Ja-En",
         Architecture = "MarianMT",
@@ -94,8 +92,7 @@ public static class DefaultModels
         BleuScore = 32.0f,
         MaxLength = 512,
         VocabSize = 65000,
-        EncoderFile = "encoder_model.onnx",
-        DecoderFile = "decoder_model.onnx",
+        // UseAutoDiscovery = true (default), encoder/decoder files auto-discovered
         TokenizerFile = "source.spm",
         Description = "Japanese to English translation using OPUS-MT.",
         License = "Apache-2.0"
@@ -107,7 +104,7 @@ public static class DefaultModels
     /// </summary>
     public static TranslatorModelInfo OpusMtZhEn { get; } = new()
     {
-        Id = "Helsinki-NLP/opus-mt-zh-en",
+        Id = "onnx-community/opus-mt-zh-en",
         Alias = "zh-en",
         DisplayName = "OPUS-MT Zh-En",
         Architecture = "MarianMT",
@@ -118,8 +115,7 @@ public static class DefaultModels
         BleuScore = 30.5f,
         MaxLength = 512,
         VocabSize = 65000,
-        EncoderFile = "encoder_model.onnx",
-        DecoderFile = "decoder_model.onnx",
+        // UseAutoDiscovery = true (default), encoder/decoder files auto-discovered
         TokenizerFile = "source.spm",
         Description = "Chinese to English translation using OPUS-MT.",
         License = "Apache-2.0"

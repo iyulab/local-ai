@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using LMSupply.Core.Download;
 using LMSupply.Download;
 using LMSupply.Inference;
 using LMSupply.Translator.Decoding;
@@ -24,6 +25,10 @@ internal sealed class OnnxTranslatorModel : ITranslatorModel
     private TranslatorTokenizer? _tokenizer;
     private bool _isInitialized;
     private bool _disposed;
+
+    // Resolved file paths (may be auto-discovered or explicit)
+    private string? _resolvedEncoderFile;
+    private string? _resolvedDecoderFile;
 
     /// <inheritdoc />
     public string ModelId => _modelInfo.Id;
@@ -274,8 +279,12 @@ internal sealed class OnnxTranslatorModel : ITranslatorModel
 
             var modelDir = await ResolveModelPathAsync(cancellationToken);
 
+            // Use resolved file paths (set during ResolveModelPathAsync)
+            var encoderFile = _resolvedEncoderFile ?? _modelInfo.EncoderFile ?? "encoder_model.onnx";
+            var decoderFile = _resolvedDecoderFile ?? _modelInfo.DecoderFile ?? "decoder_model.onnx";
+
             // Load encoder
-            var encoderPath = Path.Combine(modelDir, _modelInfo.EncoderFile);
+            var encoderPath = Path.Combine(modelDir, encoderFile);
             _encoderSession = await OnnxSessionFactory.CreateAsync(
                 encoderPath,
                 _options.Provider,
@@ -283,7 +292,7 @@ internal sealed class OnnxTranslatorModel : ITranslatorModel
                 cancellationToken: cancellationToken);
 
             // Load decoder
-            var decoderPath = Path.Combine(modelDir, _modelInfo.DecoderFile);
+            var decoderPath = Path.Combine(modelDir, decoderFile);
             _decoderSession = await OnnxSessionFactory.CreateAsync(
                 decoderPath,
                 _options.Provider,
@@ -306,32 +315,72 @@ internal sealed class OnnxTranslatorModel : ITranslatorModel
         // If it's a local path, return directory
         if (Directory.Exists(_modelInfo.Id))
         {
+            // For local paths, use explicit file names if provided
+            _resolvedEncoderFile = _modelInfo.EncoderFile;
+            _resolvedDecoderFile = _modelInfo.DecoderFile;
             return _modelInfo.Id;
         }
 
         var parentDir = Path.GetDirectoryName(_modelInfo.Id);
         if (parentDir != null && Directory.Exists(parentDir))
         {
+            _resolvedEncoderFile = _modelInfo.EncoderFile;
+            _resolvedDecoderFile = _modelInfo.DecoderFile;
             return parentDir;
         }
 
         // Download from HuggingFace
         using var downloader = new HuggingFaceDownloader(_options.CacheDirectory);
 
-        var modelDir = await downloader.DownloadModelAsync(
-            _modelInfo.Id,
-            files:
-            [
-                _modelInfo.EncoderFile,
-                _modelInfo.DecoderFile,
-                "config.json",
-                "vocab.json",
-                "tokenizer.json",
-                _modelInfo.TokenizerFile
-            ],
-            cancellationToken: cancellationToken);
+        if (_modelInfo.UseAutoDiscovery)
+        {
+            // Use auto-discovery for ONNX files
+            var preferences = new ModelPreferences
+            {
+                PreferredSubfolder = _modelInfo.Subfolder,
+                DecoderVariantPriority = [_modelInfo.PreferredDecoderVariant, DecoderVariant.Standard, DecoderVariant.Merged]
+            };
 
-        return modelDir;
+            var (modelDir, discovery) = await downloader.DownloadWithDiscoveryAsync(
+                _modelInfo.Id,
+                preferences: preferences,
+                cancellationToken: cancellationToken);
+
+            // Store discovered file paths
+            _resolvedEncoderFile = discovery.PrimaryEncoderFile is not null
+                ? Path.GetFileName(discovery.PrimaryEncoderFile)
+                : throw new InvalidOperationException($"No encoder model found in repository '{_modelInfo.Id}'");
+
+            _resolvedDecoderFile = discovery.PrimaryDecoderFile is not null
+                ? Path.GetFileName(discovery.PrimaryDecoderFile)
+                : throw new InvalidOperationException($"No decoder model found in repository '{_modelInfo.Id}'");
+
+            return modelDir;
+        }
+        else
+        {
+            // Use explicit file list (legacy behavior)
+            var encoderFile = _modelInfo.EncoderFile ?? "encoder_model.onnx";
+            var decoderFile = _modelInfo.DecoderFile ?? "decoder_model.onnx";
+
+            var modelDir = await downloader.DownloadModelAsync(
+                _modelInfo.Id,
+                files:
+                [
+                    encoderFile,
+                    decoderFile,
+                    "config.json",
+                    "vocab.json",
+                    "tokenizer.json",
+                    _modelInfo.TokenizerFile
+                ],
+                cancellationToken: cancellationToken);
+
+            _resolvedEncoderFile = encoderFile;
+            _resolvedDecoderFile = decoderFile;
+
+            return modelDir;
+        }
     }
 
     private void ConfigureSessionOptions(SessionOptions options)

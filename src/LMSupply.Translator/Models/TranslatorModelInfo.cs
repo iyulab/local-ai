@@ -1,3 +1,5 @@
+using LMSupply.Core.Download;
+
 namespace LMSupply.Translator.Models;
 
 /// <summary>
@@ -61,14 +63,31 @@ public sealed class TranslatorModelInfo
     public int VocabSize { get; init; }
 
     /// <summary>
-    /// Gets or sets the ONNX encoder file name.
+    /// Gets or sets the subfolder within the repository where model files are located.
     /// </summary>
-    public string EncoderFile { get; init; } = "encoder_model.onnx";
+    public string? Subfolder { get; init; }
 
     /// <summary>
-    /// Gets or sets the ONNX decoder file name.
+    /// Gets or sets whether to use auto-discovery for ONNX files.
+    /// When true, encoder and decoder files are automatically discovered.
+    /// When false, explicit EncoderFile and DecoderFile are used.
     /// </summary>
-    public string DecoderFile { get; init; } = "decoder_model.onnx";
+    public bool UseAutoDiscovery { get; init; } = true;
+
+    /// <summary>
+    /// Gets or sets the preferred decoder variant when using auto-discovery.
+    /// </summary>
+    public DecoderVariant PreferredDecoderVariant { get; init; } = DecoderVariant.Merged;
+
+    /// <summary>
+    /// Gets or sets the ONNX encoder file name (used when UseAutoDiscovery is false).
+    /// </summary>
+    public string? EncoderFile { get; init; }
+
+    /// <summary>
+    /// Gets or sets the ONNX decoder file name (used when UseAutoDiscovery is false).
+    /// </summary>
+    public string? DecoderFile { get; init; }
 
     /// <summary>
     /// Gets or sets the tokenizer model file name.

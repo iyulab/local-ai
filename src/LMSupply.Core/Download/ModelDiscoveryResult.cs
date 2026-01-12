@@ -36,6 +36,41 @@ public sealed class ModelDiscoveryResult
     public ModelVariants? AvailableVariants { get; init; }
 
     /// <summary>
+    /// The detected model architecture type.
+    /// </summary>
+    public ModelArchitecture Architecture { get; init; } = ModelArchitecture.Unknown;
+
+    /// <summary>
+    /// List of encoder model files for encoder-decoder architectures.
+    /// </summary>
+    public IReadOnlyList<string> EncoderFiles { get; init; } = [];
+
+    /// <summary>
+    /// List of decoder model files for encoder-decoder architectures.
+    /// </summary>
+    public IReadOnlyList<string> DecoderFiles { get; init; } = [];
+
+    /// <summary>
+    /// The detected decoder variant type.
+    /// </summary>
+    public DecoderVariant DetectedDecoderVariant { get; init; } = DecoderVariant.Standard;
+
+    /// <summary>
+    /// Gets the primary encoder file, or null if not an encoder-decoder model.
+    /// </summary>
+    public string? PrimaryEncoderFile => EncoderFiles.Count > 0 ? EncoderFiles[0] : null;
+
+    /// <summary>
+    /// Gets the primary decoder file, or null if not an encoder-decoder model.
+    /// </summary>
+    public string? PrimaryDecoderFile => DecoderFiles.Count > 0 ? DecoderFiles[0] : null;
+
+    /// <summary>
+    /// Whether this is an encoder-decoder model.
+    /// </summary>
+    public bool IsEncoderDecoder => Architecture == ModelArchitecture.EncoderDecoder;
+
+    /// <summary>
     /// Whether the model has external data files that must be downloaded together.
     /// </summary>
     public bool HasExternalData => ExternalDataFiles.Count > 0;

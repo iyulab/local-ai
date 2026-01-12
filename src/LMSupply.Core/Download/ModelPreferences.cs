@@ -55,6 +55,30 @@ public sealed class ModelPreferences
     /// If empty, all ONNX files in the selected subfolder are included.
     /// </summary>
     public IReadOnlyList<string> PreferredOnnxFiles { get; init; } = [];
+
+    /// <summary>
+    /// Priority order for decoder variant selection in encoder-decoder models.
+    /// First matching variant will be selected.
+    /// </summary>
+    public IReadOnlyList<DecoderVariant> DecoderVariantPriority { get; init; } =
+        [DecoderVariant.Merged, DecoderVariant.Standard, DecoderVariant.WithPast];
+
+    /// <summary>
+    /// Explicit encoder file to use (overrides auto-detection).
+    /// For edge cases with non-standard naming.
+    /// </summary>
+    public string? ExplicitEncoderFile { get; init; }
+
+    /// <summary>
+    /// Explicit decoder file to use (overrides auto-detection).
+    /// For edge cases with non-standard naming.
+    /// </summary>
+    public string? ExplicitDecoderFile { get; init; }
+
+    /// <summary>
+    /// Whether encoder and decoder should have matching quantization levels.
+    /// </summary>
+    public bool RequireMatchedQuantization { get; init; } = true;
 }
 
 /// <summary>

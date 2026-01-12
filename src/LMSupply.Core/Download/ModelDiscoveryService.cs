@@ -28,6 +28,34 @@ public sealed class ModelDiscoveryService : IDisposable
         "text_encoder", "text_encoder_2", "unet", "vae_decoder", "vae_encoder", "vae"
     };
 
+    // Encoder model file patterns for encoder-decoder architectures
+    private static readonly string[] EncoderPatterns =
+    [
+        "encoder_model.onnx",
+        "encoder_model_quantized.onnx",
+        "encoder_model_fp16.onnx",
+        "encoder_model_int8.onnx",
+        "encoder_model_int4.onnx",
+        "encoder.onnx"
+    ];
+
+    // Decoder model file patterns for encoder-decoder architectures (priority order)
+    private static readonly string[] DecoderPatterns =
+    [
+        "decoder_model_merged.onnx",
+        "decoder_model_merged_quantized.onnx",
+        "decoder_model_merged_fp16.onnx",
+        "decoder_model_merged_int8.onnx",
+        "decoder_model_merged_int4.onnx",
+        "decoder_model.onnx",
+        "decoder_model_quantized.onnx",
+        "decoder_model_fp16.onnx",
+        "decoder_model_int8.onnx",
+        "decoder_model_int4.onnx",
+        "decoder_with_past_model.onnx",
+        "decoder.onnx"
+    ];
+
     // Config and tokenizer files that are typically in root or pipeline subdirectories
     private static readonly HashSet<string> ConfigFileNames = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -218,6 +246,9 @@ public sealed class ModelDiscoveryService : IDisposable
         // Detect subfolder
         var subfolder = preferences.PreferredSubfolder ?? DetectOnnxSubfolder(onnxFiles, preferences);
 
+        // Detect architecture type
+        var architecture = DetectArchitecture(onnxFiles);
+
         // Select ONNX files based on subfolder and preferences
         var selectedOnnxFiles = SelectOnnxFiles(onnxFiles, subfolder, preferences);
 
@@ -230,6 +261,39 @@ public sealed class ModelDiscoveryService : IDisposable
         // Classify all variants for informational purposes
         var variants = ClassifyVariants(onnxFiles);
 
+        // Classify encoder-decoder files if applicable
+        List<string> encoderFiles = [];
+        List<string> decoderFiles = [];
+        var decoderVariant = DecoderVariant.Standard;
+
+        if (architecture == ModelArchitecture.EncoderDecoder)
+        {
+            var (encoders, decoders, variant) = ClassifyEncoderDecoderFiles(onnxFiles, preferences);
+            encoderFiles = encoders;
+            decoderFiles = decoders;
+            decoderVariant = variant;
+
+            // If explicit files specified in preferences, use those
+            if (!string.IsNullOrEmpty(preferences.ExplicitEncoderFile))
+            {
+                var explicitEncoder = onnxFiles.FirstOrDefault(f =>
+                    f.Path.EndsWith(preferences.ExplicitEncoderFile, StringComparison.OrdinalIgnoreCase));
+                if (explicitEncoder is not null)
+                    encoderFiles = [explicitEncoder.Path];
+            }
+
+            if (!string.IsNullOrEmpty(preferences.ExplicitDecoderFile))
+            {
+                var explicitDecoder = onnxFiles.FirstOrDefault(f =>
+                    f.Path.EndsWith(preferences.ExplicitDecoderFile, StringComparison.OrdinalIgnoreCase));
+                if (explicitDecoder is not null)
+                {
+                    decoderFiles = [explicitDecoder.Path];
+                    decoderVariant = DetectDecoderVariant(explicitDecoder.Path);
+                }
+            }
+        }
+
         return new ModelDiscoveryResult
         {
             RepoId = repoId,
@@ -237,7 +301,11 @@ public sealed class ModelDiscoveryService : IDisposable
             OnnxFiles = selectedOnnxFiles,
             ExternalDataFiles = externalDataFiles,
             ConfigFiles = configFiles,
-            AvailableVariants = variants
+            AvailableVariants = variants,
+            Architecture = architecture,
+            EncoderFiles = encoderFiles,
+            DecoderFiles = decoderFiles,
+            DetectedDecoderVariant = decoderVariant
         };
     }
 
@@ -374,6 +442,177 @@ public sealed class ModelDiscoveryService : IDisposable
 
         var pipelineComponentCount = DiffusionPipelineDirectories.Count(d => directories.Contains(d));
         return pipelineComponentCount >= 2;
+    }
+
+    /// <summary>
+    /// Checks if the file list contains an encoder-decoder model pattern.
+    /// </summary>
+    public static bool IsEncoderDecoderModel(IEnumerable<string> filePaths)
+    {
+        var files = filePaths.ToList();
+        var hasEncoder = files.Any(f => EncoderPatterns.Any(p =>
+            f.EndsWith(p, StringComparison.OrdinalIgnoreCase)));
+        var hasDecoder = files.Any(f => DecoderPatterns.Any(p =>
+            f.EndsWith(p, StringComparison.OrdinalIgnoreCase)));
+        return hasEncoder && hasDecoder;
+    }
+
+    /// <summary>
+    /// Detects the architecture type from a list of ONNX files.
+    /// </summary>
+    public static ModelArchitecture DetectArchitecture(List<RepoFile> onnxFiles)
+    {
+        if (IsDiffusionPipelineModel(onnxFiles))
+            return ModelArchitecture.DiffusionPipeline;
+
+        var paths = onnxFiles.Select(f => f.Path).ToList();
+        if (IsEncoderDecoderModel(paths))
+            return ModelArchitecture.EncoderDecoder;
+
+        if (onnxFiles.Count == 1)
+            return ModelArchitecture.SingleModel;
+
+        return ModelArchitecture.Unknown;
+    }
+
+    /// <summary>
+    /// Classifies encoder and decoder files from a list of ONNX files.
+    /// </summary>
+    private static (List<string> encoderFiles, List<string> decoderFiles, DecoderVariant variant)
+        ClassifyEncoderDecoderFiles(List<RepoFile> onnxFiles, ModelPreferences preferences)
+    {
+        var encoderFiles = new List<string>();
+        var decoderFiles = new List<string>();
+
+        foreach (var file in onnxFiles)
+        {
+            var fileName = file.FileName;
+            if (EncoderPatterns.Any(p => fileName.EndsWith(p, StringComparison.OrdinalIgnoreCase) ||
+                                         fileName.Equals(Path.GetFileName(p), StringComparison.OrdinalIgnoreCase)))
+            {
+                encoderFiles.Add(file.Path);
+            }
+            else if (DecoderPatterns.Any(p => fileName.EndsWith(p, StringComparison.OrdinalIgnoreCase) ||
+                                              fileName.Equals(Path.GetFileName(p), StringComparison.OrdinalIgnoreCase)))
+            {
+                decoderFiles.Add(file.Path);
+            }
+        }
+
+        // Select best decoder based on preferences
+        var selectedDecoder = SelectBestDecoder(decoderFiles, preferences);
+        var variant = DetectDecoderVariant(selectedDecoder);
+
+        // Select matching encoder (same quantization if required)
+        var selectedEncoder = preferences.RequireMatchedQuantization
+            ? SelectMatchingEncoder(encoderFiles, selectedDecoder)
+            : encoderFiles.FirstOrDefault();
+
+        return (
+            selectedEncoder is not null ? [selectedEncoder] : [],
+            selectedDecoder is not null ? [selectedDecoder] : [],
+            variant
+        );
+    }
+
+    /// <summary>
+    /// Selects the best decoder based on variant priority preferences.
+    /// </summary>
+    private static string? SelectBestDecoder(List<string> decoderFiles, ModelPreferences preferences)
+    {
+        if (decoderFiles.Count == 0)
+            return null;
+
+        // Check explicit override first
+        if (!string.IsNullOrEmpty(preferences.ExplicitDecoderFile))
+        {
+            var explicitMatch = decoderFiles.FirstOrDefault(f =>
+                f.EndsWith(preferences.ExplicitDecoderFile, StringComparison.OrdinalIgnoreCase));
+            if (explicitMatch is not null)
+                return explicitMatch;
+        }
+
+        // Select based on decoder variant priority
+        foreach (var variant in preferences.DecoderVariantPriority)
+        {
+            var patterns = variant switch
+            {
+                DecoderVariant.Merged => new[] { "decoder_model_merged" },
+                DecoderVariant.WithPast => new[] { "decoder_with_past" },
+                DecoderVariant.Standard => new[] { "decoder_model.onnx", "decoder.onnx" },
+                _ => Array.Empty<string>()
+            };
+
+            foreach (var pattern in patterns)
+            {
+                var match = decoderFiles.FirstOrDefault(f =>
+                    Path.GetFileName(f).Contains(pattern, StringComparison.OrdinalIgnoreCase));
+                if (match is not null)
+                    return match;
+            }
+        }
+
+        return decoderFiles.FirstOrDefault();
+    }
+
+    /// <summary>
+    /// Selects an encoder that matches the quantization of the selected decoder.
+    /// </summary>
+    private static string? SelectMatchingEncoder(List<string> encoderFiles, string? selectedDecoder)
+    {
+        if (encoderFiles.Count == 0 || selectedDecoder is null)
+            return encoderFiles.FirstOrDefault();
+
+        var decoderFileName = Path.GetFileName(selectedDecoder);
+
+        // Determine quantization suffix from decoder
+        string? quantSuffix = null;
+        foreach (var suffix in new[] { "_int4", "_int8", "_fp16", "_quantized" })
+        {
+            if (decoderFileName.Contains(suffix, StringComparison.OrdinalIgnoreCase))
+            {
+                quantSuffix = suffix;
+                break;
+            }
+        }
+
+        if (quantSuffix is not null)
+        {
+            // Find encoder with matching quantization
+            var match = encoderFiles.FirstOrDefault(f =>
+                Path.GetFileName(f).Contains(quantSuffix, StringComparison.OrdinalIgnoreCase));
+            if (match is not null)
+                return match;
+        }
+        else
+        {
+            // Decoder has no quantization, prefer encoder without quantization
+            var match = encoderFiles.FirstOrDefault(f =>
+                !HasQuantizationSuffix(Path.GetFileName(f)));
+            if (match is not null)
+                return match;
+        }
+
+        return encoderFiles.FirstOrDefault();
+    }
+
+    /// <summary>
+    /// Detects the decoder variant type from a decoder file path.
+    /// </summary>
+    private static DecoderVariant DetectDecoderVariant(string? decoderPath)
+    {
+        if (string.IsNullOrEmpty(decoderPath))
+            return DecoderVariant.Standard;
+
+        var fileName = Path.GetFileName(decoderPath);
+
+        if (fileName.Contains("merged", StringComparison.OrdinalIgnoreCase))
+            return DecoderVariant.Merged;
+
+        if (fileName.Contains("with_past", StringComparison.OrdinalIgnoreCase))
+            return DecoderVariant.WithPast;
+
+        return DecoderVariant.Standard;
     }
 
     /// <summary>
