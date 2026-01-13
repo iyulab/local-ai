@@ -40,8 +40,10 @@ public class TranslatorModelInfoTests
         };
 
         modelInfo.MaxLength.Should().Be(512);
-        modelInfo.EncoderFile.Should().Be("encoder_model.onnx");
-        modelInfo.DecoderFile.Should().Be("decoder_model.onnx");
+        // EncoderFile and DecoderFile are nullable, auto-discovery is preferred
+        modelInfo.EncoderFile.Should().BeNull();
+        modelInfo.DecoderFile.Should().BeNull();
+        modelInfo.UseAutoDiscovery.Should().BeTrue();
         modelInfo.TokenizerFile.Should().Be("source.spm");
         modelInfo.Description.Should().BeEmpty();
         modelInfo.License.Should().Be("Unknown");
@@ -150,7 +152,8 @@ public class TranslatorModelInfoTests
     {
         var model = DefaultModels.OpusMtKoEn;
 
-        model.Id.Should().Be("Helsinki-NLP/opus-mt-ko-en");
+        // Uses onnx-community repo with pre-converted ONNX files
+        model.Id.Should().Be("onnx-community/opus-mt-ko-en");
         model.Alias.Should().Be("default");
         model.SourceLanguage.Should().Be("ko");
         model.TargetLanguage.Should().Be("en");
@@ -161,7 +164,7 @@ public class TranslatorModelInfoTests
     [Fact]
     public void DefaultModels_All_ShouldContainExpectedCount()
     {
-        DefaultModels.All.Should().HaveCountGreaterOrEqualTo(4);
+        DefaultModels.All.Should().HaveCountGreaterThanOrEqualTo(4);
     }
 
     [Fact]

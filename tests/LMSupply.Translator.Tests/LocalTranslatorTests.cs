@@ -75,14 +75,15 @@ public class LocalTranslatorTests
     }
 
     [Fact]
-    public void GetAllModels_AllModels_ShouldHaveValidEncoderDecoderFiles()
+    public void GetAllModels_AllModels_ShouldUseAutoDiscovery()
     {
         var models = LocalTranslator.GetAllModels();
 
         foreach (var model in models)
         {
-            model.EncoderFile.Should().EndWith(".onnx");
-            model.DecoderFile.Should().EndWith(".onnx");
+            // Models should use auto-discovery for ONNX file resolution
+            // This ensures proper handling of subfolder structures (e.g., onnx/)
+            model.UseAutoDiscovery.Should().BeTrue();
         }
     }
 
@@ -94,7 +95,7 @@ public class LocalTranslatorTests
         foreach (var model in models)
         {
             model.MaxLength.Should().BeGreaterThan(0);
-            model.MaxLength.Should().BeLessOrEqualTo(1024);
+            model.MaxLength.Should().BeLessThanOrEqualTo(1024);
         }
     }
 

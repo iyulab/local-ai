@@ -1,3 +1,5 @@
+using System.Text;
+using System.Text.Json;
 using LMSupply.Text;
 using Microsoft.ML.Tokenizers;
 
@@ -108,10 +110,20 @@ internal sealed class TranslatorTokenizer : IDisposable
             tokens.Add(_bosTokenId);
         }
 
-        var encodedIds = _sourceTokenizer.EncodeToIds(text);
-        foreach (var id in encodedIds)
+        // Get pieces from SentencePiece tokenizer and map to vocab.json IDs
+        var encodedTokens = _sourceTokenizer.EncodeToTokens(text, out _);
+        foreach (var token in encodedTokens)
         {
-            tokens.Add(id);
+            // Map piece string to vocab.json ID
+            if (_vocab.TryGetValue(token.Value, out var vocabId))
+            {
+                tokens.Add(vocabId);
+            }
+            else
+            {
+                // Use UNK token for unknown pieces
+                tokens.Add(_unkTokenId);
+            }
         }
 
         if (addSpecialTokens)
@@ -140,8 +152,24 @@ internal sealed class TranslatorTokenizer : IDisposable
                 id != _eosTokenId);
         }
 
-        var result = _targetTokenizer.Decode(ids);
-        return result ?? string.Empty;
+        // Map vocab.json IDs back to pieces and concatenate
+        var pieces = new StringBuilder();
+        foreach (var id in ids)
+        {
+            if (_reverseVocab.TryGetValue(id, out var piece))
+            {
+                pieces.Append(piece);
+            }
+        }
+
+        var result = pieces.ToString();
+
+        // Replace SentencePiece whitespace marker (▁) with actual space and normalize
+        result = result.Replace("▁", " ");
+        // Normalize multiple consecutive spaces to single space and trim
+        result = string.Join(" ", result.Split(default(char[]), StringSplitOptions.RemoveEmptyEntries));
+
+        return result;
     }
 
     /// <summary>
@@ -203,73 +231,202 @@ internal sealed class TranslatorTokenizer : IDisposable
 
     private static Tokenizer LoadSentencePieceTokenizer(string modelDir, string primaryFile, string fallbackFile)
     {
-        var primaryPath = Path.Combine(modelDir, primaryFile);
-        var fallbackPath = Path.Combine(modelDir, fallbackFile);
+        // Build list of candidate paths to search (modelDir and subdirectories)
+        var searchPaths = new List<string> { modelDir };
 
+        // Also search in common subdirectories where ONNX files may be located
+        var subdirs = new[] { "onnx", "model" };
+        foreach (var subdir in subdirs)
+        {
+            var subdirPath = Path.Combine(modelDir, subdir);
+            if (Directory.Exists(subdirPath))
+                searchPaths.Add(subdirPath);
+        }
+
+        // Search for SentencePiece tokenizer files
         string? tokenizerPath = null;
+        foreach (var searchPath in searchPaths)
+        {
+            var primaryPath = Path.Combine(searchPath, primaryFile);
+            var fallbackPath = Path.Combine(searchPath, fallbackFile);
 
-        if (File.Exists(primaryPath))
-            tokenizerPath = primaryPath;
-        else if (File.Exists(fallbackPath))
-            tokenizerPath = fallbackPath;
+            if (File.Exists(primaryPath))
+            {
+                tokenizerPath = primaryPath;
+                break;
+            }
+            if (File.Exists(fallbackPath))
+            {
+                tokenizerPath = fallbackPath;
+                break;
+            }
+        }
 
         if (tokenizerPath != null)
         {
             try
             {
+                // Use SentencePieceTokenizer for .spm files (supports both BPE and Unigram)
                 using var stream = File.OpenRead(tokenizerPath);
-                return LlamaTokenizer.Create(stream);
+                return SentencePieceTokenizer.Create(stream);
             }
             catch
             {
-                // Fall through to BPE tokenizer
+                // Fall through to alternative tokenizers
             }
         }
 
-        // Try loading from tokenizer.json (HuggingFace format) using LlamaTokenizer
-        var tokenizerJsonPath = Path.Combine(modelDir, "tokenizer.json");
-        if (File.Exists(tokenizerJsonPath))
+        // Try loading from tokenizer.json (HuggingFace format)
+        foreach (var searchPath in searchPaths)
         {
-            try
+            var tokenizerJsonPath = Path.Combine(searchPath, "tokenizer.json");
+            if (File.Exists(tokenizerJsonPath))
             {
-                using var stream = File.OpenRead(tokenizerJsonPath);
-                return LlamaTokenizer.Create(stream);
-            }
-            catch
-            {
-                // Fall through to fallback
+                try
+                {
+                    using var stream = File.OpenRead(tokenizerJsonPath);
+                    return LlamaTokenizer.Create(stream);
+                }
+                catch
+                {
+                    // Continue searching
+                }
             }
         }
 
         // Create a fallback tokenizer using vocab.json if available
-        return CreateFallbackTokenizer(modelDir);
+        return CreateFallbackTokenizer(modelDir, searchPaths);
     }
 
-    private static Tokenizer CreateFallbackTokenizer(string modelDir)
+    private static Tokenizer CreateFallbackTokenizer(string modelDir, IEnumerable<string>? searchPaths = null)
     {
-        // Try to create BPE tokenizer from vocab.json and merges.txt
-        var vocabPath = Path.Combine(modelDir, "vocab.json");
-        var mergesPath = Path.Combine(modelDir, "merges.txt");
+        var paths = searchPaths?.ToList() ?? [modelDir];
 
-        if (File.Exists(vocabPath) && File.Exists(mergesPath))
+        // Try to create BPE tokenizer from vocab.json and merges.txt
+        foreach (var searchPath in paths)
         {
-            try
+            var vocabPath = Path.Combine(searchPath, "vocab.json");
+            var mergesPath = Path.Combine(searchPath, "merges.txt");
+
+            if (File.Exists(vocabPath) && File.Exists(mergesPath))
             {
-                using var vocabStream = File.OpenRead(vocabPath);
-                using var mergesStream = File.OpenRead(mergesPath);
-                return CodeGenTokenizer.Create(vocabStream, mergesStream);
-            }
-            catch
-            {
-                // Fall through
+                try
+                {
+                    using var vocabStream = File.OpenRead(vocabPath);
+                    using var mergesStream = File.OpenRead(mergesPath);
+                    return CodeGenTokenizer.Create(vocabStream, mergesStream);
+                }
+                catch
+                {
+                    // Continue searching
+                }
             }
         }
 
-        // Return a simple whitespace-based tokenizer as last resort
-        // This creates a minimal tokenizer that at least won't crash
+        // Try to create tokenizer from tokenizer.json (Unigram/BPE models)
+        Exception? lastException = null;
+        foreach (var searchPath in paths)
+        {
+            var tokenizerJsonPath = Path.Combine(searchPath, "tokenizer.json");
+            if (File.Exists(tokenizerJsonPath))
+            {
+                try
+                {
+                    var tokenizer = CreateTokenizerFromJson(tokenizerJsonPath);
+                    if (tokenizer != null)
+                        return tokenizer;
+                }
+                catch (Exception ex)
+                {
+                    lastException = ex;
+                    // Continue searching
+                }
+            }
+        }
+
+        if (lastException != null)
+        {
+            throw new InvalidOperationException(
+                $"Failed to load tokenizer from tokenizer.json: {lastException.Message}",
+                lastException);
+        }
+
+        var searchedPaths = string.Join(", ", paths);
         throw new InvalidOperationException(
             $"Could not load tokenizer from model directory: {modelDir}. " +
+            $"Searched paths: [{searchedPaths}]. " +
             "Expected one of: source.spm, sentencepiece.bpe.model, tokenizer.json, or vocab.json + merges.txt");
+    }
+
+    private static Tokenizer? CreateTokenizerFromJson(string tokenizerJsonPath)
+    {
+        var json = File.ReadAllText(tokenizerJsonPath);
+        using var doc = JsonDocument.Parse(json);
+
+        if (!doc.RootElement.TryGetProperty("model", out var model))
+            return null;
+
+        if (!model.TryGetProperty("vocab", out var vocab))
+            return null;
+
+        // Build vocab dictionary sorted by ID
+        var vocabDict = new SortedDictionary<int, string>();
+
+        if (vocab.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var property in vocab.EnumerateObject())
+            {
+                vocabDict[property.Value.GetInt32()] = property.Name;
+            }
+        }
+        else if (vocab.ValueKind == JsonValueKind.Array)
+        {
+            // Unigram format: [["token", score], ...]
+            var index = 0;
+            foreach (var item in vocab.EnumerateArray())
+            {
+                if (item.ValueKind == JsonValueKind.Array)
+                {
+                    var arr = item.EnumerateArray().ToArray();
+                    if (arr.Length >= 1 && arr[0].ValueKind == JsonValueKind.String)
+                    {
+                        vocabDict[index] = arr[0].GetString() ?? string.Empty;
+                    }
+                }
+                index++;
+            }
+        }
+
+        if (vocabDict.Count == 0)
+            return null;
+
+        // Create vocab.txt format for WordPieceTokenizer
+        // Map special tokens to BERT-compatible format
+        var vocabLines = new StringBuilder();
+        for (var i = 0; i < vocabDict.Count; i++)
+        {
+            if (vocabDict.TryGetValue(i, out var token))
+            {
+                // Map MarianMT special tokens to BERT-compatible tokens
+                var mappedToken = token switch
+                {
+                    "<unk>" => "[UNK]",
+                    "<pad>" => "[PAD]",
+                    "<s>" => "[CLS]",
+                    "</s>" => "[SEP]",
+                    _ => token
+                };
+                vocabLines.AppendLine(mappedToken);
+            }
+            else
+            {
+                vocabLines.AppendLine($"[unused{i}]");
+            }
+        }
+
+        var vocabBytes = Encoding.UTF8.GetBytes(vocabLines.ToString());
+        using var vocabStream = new MemoryStream(vocabBytes);
+        return WordPieceTokenizer.Create(vocabStream);
     }
 
     public void Dispose()

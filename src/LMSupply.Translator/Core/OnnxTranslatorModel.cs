@@ -199,7 +199,16 @@ internal sealed class OnnxTranslatorModel : ITranslatorModel
                     NamedOnnxValue.CreateFromTensor("encoder_hidden_states", encoderOutput)
                 };
 
-                using var outputs = _decoderSession!.Run(inputs);
+                // Add use_cache_branch input if the model requires it (merged decoder models)
+                // Set to false since we're not using KV-caching
+                var inputNames = _decoderSession!.InputMetadata.Keys;
+                if (inputNames.Contains("use_cache_branch"))
+                {
+                    var useCacheBranch = new DenseTensor<bool>(new[] { false }, new[] { 1 });
+                    inputs.Add(NamedOnnxValue.CreateFromTensor("use_cache_branch", useCacheBranch));
+                }
+
+                using var outputs = _decoderSession.Run(inputs);
                 var logits = outputs.First().AsTensor<float>();
 
                 // Get the last token's logits
@@ -346,13 +355,13 @@ internal sealed class OnnxTranslatorModel : ITranslatorModel
                 preferences: preferences,
                 cancellationToken: cancellationToken);
 
-            // Store discovered file paths
+            // Store discovered file paths (preserve relative path structure for subfolder support)
             _resolvedEncoderFile = discovery.PrimaryEncoderFile is not null
-                ? Path.GetFileName(discovery.PrimaryEncoderFile)
+                ? discovery.PrimaryEncoderFile.Replace('/', Path.DirectorySeparatorChar)
                 : throw new InvalidOperationException($"No encoder model found in repository '{_modelInfo.Id}'");
 
             _resolvedDecoderFile = discovery.PrimaryDecoderFile is not null
-                ? Path.GetFileName(discovery.PrimaryDecoderFile)
+                ? discovery.PrimaryDecoderFile.Replace('/', Path.DirectorySeparatorChar)
                 : throw new InvalidOperationException($"No decoder model found in repository '{_modelInfo.Id}'");
 
             return modelDir;

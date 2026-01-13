@@ -165,6 +165,15 @@ internal sealed class BeamSearchDecoder
             NamedOnnxValue.CreateFromTensor("encoder_hidden_states", encoderOutput)
         };
 
+        // Add use_cache_branch input if the model requires it (merged decoder models)
+        // Set to false since we're not using KV-caching
+        var inputNames = decoderSession.InputMetadata.Keys;
+        if (inputNames.Contains("use_cache_branch"))
+        {
+            var useCacheBranch = new DenseTensor<bool>(new[] { false }, new[] { 1 });
+            inputs.Add(NamedOnnxValue.CreateFromTensor("use_cache_branch", useCacheBranch));
+        }
+
         using var outputs = decoderSession.Run(inputs);
         var logitsTensor = outputs.First().AsTensor<float>();
 

@@ -163,12 +163,14 @@ public class TranslatorModelRegistryTests
     }
 
     [Fact]
-    public void ModelInfo_ShouldHaveCorrectEncoderDecoderFiles()
+    public void ModelInfo_ShouldUseAutoDiscovery()
     {
         var model = _registry.Resolve("default");
 
-        model.EncoderFile.Should().Be("encoder_model.onnx");
-        model.DecoderFile.Should().Be("decoder_model.onnx");
+        // With auto-discovery enabled, EncoderFile/DecoderFile are null and discovered at runtime
+        model.UseAutoDiscovery.Should().BeTrue();
+        // EncoderFile/DecoderFile may be null when auto-discovery is enabled
+        // They are resolved during model loading, not at registration time
     }
 
     [Fact]

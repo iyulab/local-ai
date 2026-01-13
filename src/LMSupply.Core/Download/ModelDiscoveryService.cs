@@ -70,6 +70,9 @@ public sealed class ModelDiscoveryService : IDisposable
         "generation_config.json",
         "preprocessor_config.json",
         "genai_config.json",
+        // MarianMT/OPUS-MT SentencePiece tokenizer files
+        "source.spm",
+        "target.spm",
         // Diffusion pipeline specific
         "scheduler_config.json",
         "model_index.json"
