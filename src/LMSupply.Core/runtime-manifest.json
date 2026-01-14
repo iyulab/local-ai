@@ -21,7 +21,7 @@
             {
               "rid": "win-x64",
               "provider": "cuda12",
-              "url": "https://github.com/microsoft/onnxruntime/releases/download/v1.23.2/onnxruntime-win-x64-gpu-cuda12-1.23.2.zip",
+              "url": "https://github.com/microsoft/onnxruntime/releases/download/v1.23.2/onnxruntime-win-x64-gpu-1.23.2.zip",
               "fileName": "onnxruntime.dll",
               "size": 220000000,
               "sha256": "placeholder-will-be-updated",
@@ -58,7 +58,7 @@
             {
               "rid": "linux-x64",
               "provider": "cuda12",
-              "url": "https://github.com/microsoft/onnxruntime/releases/download/v1.23.2/onnxruntime-linux-x64-gpu-cuda12-1.23.2.tgz",
+              "url": "https://github.com/microsoft/onnxruntime/releases/download/v1.23.2/onnxruntime-linux-x64-gpu-1.23.2.tgz",
               "fileName": "libonnxruntime.so.1.23.2",
               "size": 210000000,
               "sha256": "placeholder-will-be-updated",
