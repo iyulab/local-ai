@@ -80,4 +80,43 @@ public class TranscriberModelRegistryTests
         modelUpper.Should().BeEquivalentTo(modelMixed);
     }
 
+    /// <summary>
+    /// Verifies that the "large" alias points to whisper-large-v3-turbo (public model),
+    /// not the gated whisper-large-v3 which requires HuggingFace authentication.
+    /// Fix for issue #4: Large model returns 401 Unauthorized error.
+    /// </summary>
+    [Fact]
+    public void TryGet_LargeAlias_ShouldResolveToTurboModel()
+    {
+        var result = TranscriberModelRegistry.Default.TryGet("large", out var model);
+
+        result.Should().BeTrue();
+        model.Should().NotBeNull();
+        model!.Id.Should().Contain("turbo", "large alias should use turbo model to avoid gated model auth issues");
+        model.Id.Should().NotBe("onnx-community/whisper-large-v3", "gated model requires HuggingFace auth");
+    }
+
+    /// <summary>
+    /// Verifies all registered models use public HuggingFace repositories
+    /// that don't require authentication for download.
+    /// </summary>
+    [Fact]
+    public void GetAll_AllModels_ShouldUsePublicRepositories()
+    {
+        var models = TranscriberModelRegistry.Default.GetAll();
+
+        // Known gated models that should NOT be used
+        var gatedModels = new[]
+        {
+            "onnx-community/whisper-large-v3",
+            "openai/whisper-large-v3"
+        };
+
+        foreach (var model in models)
+        {
+            gatedModels.Should().NotContain(model.Id,
+                $"Model '{model.Alias}' uses gated repository '{model.Id}' which requires HuggingFace auth");
+        }
+    }
+
 }

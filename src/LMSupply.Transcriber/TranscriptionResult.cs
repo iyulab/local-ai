@@ -86,6 +86,11 @@ public sealed class TranscriptionSegment
 
     /// <summary>
     /// Gets word-level timestamps if available.
+    /// <para>
+    /// <b>Note:</b> Currently always null. Word-level timestamps require
+    /// cross-attention alignment with DTW which is not yet implemented.
+    /// Use segment-level Start/End timestamps instead.
+    /// </para>
     /// </summary>
     public IReadOnlyList<WordTimestamp>? Words { get; init; }
 

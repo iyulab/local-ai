@@ -200,6 +200,14 @@ public sealed class RuntimeBinaryEntry
     public List<string>? Dependencies { get; set; }
 
     /// <summary>
+    /// Gets or sets the inner path within the archive to extract files from.
+    /// Used for NuGet packages where binaries are in specific subdirectories.
+    /// Example: "runtimes/win-x64/native" for NuGet runtime packages.
+    /// </summary>
+    [JsonPropertyName("innerPath")]
+    public string? InnerPath { get; set; }
+
+    /// <summary>
     /// Gets the file size in megabytes.
     /// </summary>
     [JsonIgnore]

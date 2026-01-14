@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <!-- Optimize for benchmarking -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BenchmarkDotNet" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\LMSupply.Transcriber\LMSupply.Transcriber.csproj" />
+    <ProjectReference Include="..\..\src\LMSupply.Embedder\LMSupply.Embedder.csproj" />
+    <ProjectReference Include="..\..\src\LMSupply.Reranker\LMSupply.Reranker.csproj" />
+  </ItemGroup>
+
+  <!-- Optional: Include GPU provider packages for testing -->
+  <ItemGroup Condition="'$(EnableCuda)' == 'true'">
+    <PackageReference Include="Microsoft.ML.OnnxRuntime.Gpu" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(EnableDirectML)' == 'true'">
+    <PackageReference Include="Microsoft.ML.OnnxRuntime.DirectML" />
+  </ItemGroup>
+
+  <!-- Sample audio files for benchmarking -->
+  <ItemGroup>
+    <None Update="Data\*.wav" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Data\*.mp3" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

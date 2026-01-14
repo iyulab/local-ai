@@ -28,6 +28,26 @@
               "dependencies": ["onnxruntime_providers_cuda.dll", "onnxruntime_providers_shared.dll"]
             },
             {
+              "rid": "win-x64",
+              "provider": "directml",
+              "url": "https://www.nuget.org/api/v2/package/Microsoft.ML.OnnxRuntime.DirectML/1.20.1",
+              "fileName": "onnxruntime.dll",
+              "size": 25000000,
+              "sha256": "placeholder-will-be-updated",
+              "innerPath": "runtimes/win-x64/native",
+              "dependencies": ["DirectML.dll"]
+            },
+            {
+              "rid": "win-arm64",
+              "provider": "directml",
+              "url": "https://www.nuget.org/api/v2/package/Microsoft.ML.OnnxRuntime.DirectML/1.20.1",
+              "fileName": "onnxruntime.dll",
+              "size": 20000000,
+              "sha256": "placeholder-will-be-updated",
+              "innerPath": "runtimes/win-arm64/native",
+              "dependencies": ["DirectML.dll"]
+            },
+            {
               "rid": "linux-x64",
               "provider": "cpu",
               "url": "https://github.com/microsoft/onnxruntime/releases/download/v1.23.2/onnxruntime-linux-x64-1.23.2.tgz",
@@ -98,6 +118,26 @@
               "size": 220000000,
               "sha256": "placeholder-will-be-updated",
               "dependencies": ["onnxruntime_providers_cuda.dll", "onnxruntime_providers_shared.dll"]
+            },
+            {
+              "rid": "win-x64",
+              "provider": "directml",
+              "url": "https://www.nuget.org/api/v2/package/Microsoft.ML.OnnxRuntime.DirectML/1.20.1",
+              "fileName": "onnxruntime.dll",
+              "size": 25000000,
+              "sha256": "placeholder-will-be-updated",
+              "innerPath": "runtimes/win-x64/native",
+              "dependencies": ["DirectML.dll"]
+            },
+            {
+              "rid": "win-arm64",
+              "provider": "directml",
+              "url": "https://www.nuget.org/api/v2/package/Microsoft.ML.OnnxRuntime.DirectML/1.20.1",
+              "fileName": "onnxruntime.dll",
+              "size": 20000000,
+              "sha256": "placeholder-will-be-updated",
+              "innerPath": "runtimes/win-arm64/native",
+              "dependencies": ["DirectML.dll"]
             },
             {
               "rid": "linux-x64",
