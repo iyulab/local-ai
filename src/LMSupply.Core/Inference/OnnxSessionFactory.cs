@@ -282,28 +282,76 @@ public static class OnnxSessionFactory
         if (!OperatingSystem.IsWindows() && !OperatingSystem.IsLinux())
             return (false, new[] { "CUDA not supported on this platform" });
 
-        // Check common CUDA runtime libraries
-        // We check for cuBLAS (required) - if this is missing, CUDA won't work
-        var librariesToCheck = new[] { "cublas64_12", "cublasLt64_12" };
+        // Get CUDA installation path
+        var cudaPath = Environment.GetEnvironmentVariable("CUDA_PATH");
+        if (string.IsNullOrEmpty(cudaPath))
+        {
+            return (false, new[] { "CUDA_PATH not set" });
+        }
+
+        var cudaBin = Path.Combine(cudaPath, "bin");
+        if (!Directory.Exists(cudaBin))
+        {
+            return (false, new[] { $"CUDA bin directory not found: {cudaBin}" });
+        }
+
+        // Check for required CUDA libraries
+        var librariesToCheck = new[] { "cublas64_12.dll", "cublasLt64_12.dll" };
         var missing = new List<string>();
 
         foreach (var lib in librariesToCheck)
         {
-            try
+            var libPath = Path.Combine(cudaBin, lib);
+            if (!File.Exists(libPath))
             {
-                if (!System.Runtime.InteropServices.NativeLibrary.TryLoad(lib, out var handle))
+                missing.Add(lib);
+            }
+        }
+
+        // Also check for cuDNN (required for CUDA provider)
+        var cudnnDll = "cudnn64_9.dll";
+        bool cudnnFound = false;
+
+        // Check in CUDA bin directory
+        if (File.Exists(Path.Combine(cudaBin, cudnnDll)))
+        {
+            cudnnFound = true;
+        }
+
+        // Check in standard cuDNN installation paths
+        if (!cudnnFound)
+        {
+            var cudnnBasePath = @"C:\Program Files\NVIDIA\CUDNN";
+            if (Directory.Exists(cudnnBasePath))
+            {
+                foreach (var versionDir in Directory.GetDirectories(cudnnBasePath, "v*"))
                 {
-                    missing.Add(lib + ".dll");
-                }
-                else
-                {
-                    System.Runtime.InteropServices.NativeLibrary.Free(handle);
+                    var binDir = Path.Combine(versionDir, "bin");
+                    if (Directory.Exists(binDir))
+                    {
+                        // Check CUDA version-specific subdirectories
+                        foreach (var cudaVersionDir in Directory.GetDirectories(binDir))
+                        {
+                            if (File.Exists(Path.Combine(cudaVersionDir, cudnnDll)))
+                            {
+                                cudnnFound = true;
+                                break;
+                            }
+                        }
+                        // Also check bin directory itself
+                        if (!cudnnFound && File.Exists(Path.Combine(binDir, cudnnDll)))
+                        {
+                            cudnnFound = true;
+                        }
+                    }
+                    if (cudnnFound) break;
                 }
             }
-            catch
-            {
-                missing.Add(lib + ".dll");
-            }
+        }
+
+        if (!cudnnFound)
+        {
+            missing.Add(cudnnDll);
         }
 
         if (missing.Count > 0)
