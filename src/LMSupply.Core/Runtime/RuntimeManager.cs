@@ -94,10 +94,11 @@ public sealed class RuntimeManager : IAsyncDisposable
 
     /// <summary>
     /// Ensures a runtime binary is available, downloading if necessary.
+    /// When provider is null (Auto mode), uses the fallback chain: CUDA → DirectML → CoreML → CPU.
     /// </summary>
     /// <param name="package">The package name (e.g., "onnxruntime").</param>
     /// <param name="version">Optional version. If null, uses latest available.</param>
-    /// <param name="provider">Optional provider. If null, uses best available for hardware.</param>
+    /// <param name="provider">Optional provider. If null, uses fallback chain for best available.</param>
     /// <param name="progress">Optional progress reporter.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Path to the binary directory.</returns>
@@ -111,9 +112,6 @@ public sealed class RuntimeManager : IAsyncDisposable
         await InitializeAsync(cancellationToken);
 
         var rid = _platform!.RuntimeIdentifier;
-        var actualProvider = provider ?? GetDefaultProvider();
-
-        // Check cache first
         var manifest = await _manifestProvider.GetManifestAsync(cancellationToken: cancellationToken);
 
         // Resolve version if not specified
@@ -129,61 +127,76 @@ public sealed class RuntimeManager : IAsyncDisposable
                 throw new InvalidOperationException($"No versions available for package: {package}");
         }
 
-        // Check cache
-        var cachedPath = await _cache.GetCachedPathAsync(package, actualVersion, rid, actualProvider, cancellationToken);
+        // If provider is explicitly specified, use single-provider logic with CPU fallback
+        if (!string.IsNullOrEmpty(provider))
+        {
+            return await EnsureRuntimeForProviderAsync(
+                package, actualVersion, rid, provider, progress, cancellationToken);
+        }
+
+        // Auto mode: try providers in fallback chain order
+        var chain = GetProviderFallbackChain();
+        Exception? lastException = null;
+
+        foreach (var providerToTry in chain)
+        {
+            try
+            {
+                return await EnsureRuntimeForProviderAsync(
+                    package, actualVersion, rid, providerToTry, progress, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                throw; // Don't catch cancellation
+            }
+            catch (Exception ex) when (providerToTry != "cpu")
+            {
+                // Log and continue to next provider in chain
+                System.Diagnostics.Debug.WriteLine(
+                    $"[RuntimeManager] Provider '{providerToTry}' failed for {package}: {ex.Message}. Trying next provider...");
+                lastException = ex;
+            }
+        }
+
+        // Should not reach here since CPU is always in chain, but just in case
+        throw lastException ?? new InvalidOperationException($"No provider available for {package}");
+    }
+
+    /// <summary>
+    /// Ensures runtime for a specific provider with CPU fallback.
+    /// </summary>
+    private async Task<string> EnsureRuntimeForProviderAsync(
+        string package,
+        string version,
+        string rid,
+        string provider,
+        IProgress<DownloadProgress>? progress,
+        CancellationToken cancellationToken)
+    {
+        // Check cache first
+        var cachedPath = await _cache.GetCachedPathAsync(package, version, rid, provider, cancellationToken);
         if (cachedPath is not null)
         {
-            // Register with native loader and pre-load the DLL
             NativeLoader.Instance.RegisterDirectory(Path.GetDirectoryName(cachedPath)!, preload: true, primaryLibrary: package);
             return Path.GetDirectoryName(cachedPath)!;
         }
 
         // Get binary entry from manifest
-        var entry = await _manifestProvider.GetBinaryAsync(package, actualVersion, rid, actualProvider, cancellationToken);
+        var entry = await _manifestProvider.GetBinaryAsync(package, version, rid, provider, cancellationToken);
         if (entry is null)
         {
-            // Try fallback to CPU if GPU provider not available
-            if (actualProvider != "cpu")
-            {
-                entry = await _manifestProvider.GetBinaryAsync(package, actualVersion, rid, "cpu", cancellationToken);
-                if (entry is not null)
-                    actualProvider = "cpu";
-            }
-        }
-
-        if (entry is null)
             throw new InvalidOperationException(
-                $"No binary available for {package} {actualVersion} on {rid} with provider {actualProvider}");
-
-        // Download and cache with fallback to CPU on failure
-        try
-        {
-            var targetDirectory = _cache.GetCacheDirectory(package, actualVersion, rid, actualProvider);
-            var binaryPath = await _downloader.DownloadAsync(entry, targetDirectory, progress, cancellationToken);
-
-            // Register in cache
-            await _cache.RegisterAsync(entry, package, actualVersion, binaryPath, cancellationToken);
-
-            // Register with native loader and pre-load the DLL
-            NativeLoader.Instance.RegisterDirectory(targetDirectory, preload: true, primaryLibrary: package);
-
-            return targetDirectory;
+                $"No binary available for {package} {version} on {rid} with provider {provider}");
         }
-        catch (Exception) when (actualProvider != "cpu")
-        {
-            // Fallback to CPU provider if GPU provider download fails
-            var cpuEntry = await _manifestProvider.GetBinaryAsync(package, actualVersion, rid, "cpu", cancellationToken);
-            if (cpuEntry is null)
-                throw;
 
-            var cpuTargetDirectory = _cache.GetCacheDirectory(package, actualVersion, rid, "cpu");
-            var cpuBinaryPath = await _downloader.DownloadAsync(cpuEntry, cpuTargetDirectory, progress, cancellationToken);
+        // Download and cache
+        var targetDirectory = _cache.GetCacheDirectory(package, version, rid, provider);
+        var binaryPath = await _downloader.DownloadAsync(entry, targetDirectory, progress, cancellationToken);
 
-            await _cache.RegisterAsync(cpuEntry, package, actualVersion, cpuBinaryPath, cancellationToken);
-            NativeLoader.Instance.RegisterDirectory(cpuTargetDirectory, preload: true, primaryLibrary: package);
+        await _cache.RegisterAsync(entry, package, version, binaryPath, cancellationToken);
+        NativeLoader.Instance.RegisterDirectory(targetDirectory, preload: true, primaryLibrary: package);
 
-            return cpuTargetDirectory;
-        }
+        return targetDirectory;
     }
 
     /// <summary>
@@ -202,6 +215,41 @@ public sealed class RuntimeManager : IAsyncDisposable
             _ when _gpu.CoreMLSupported => "coreml",
             _ => "cpu"
         };
+    }
+
+    /// <summary>
+    /// Gets a prioritized list of providers to try based on detected hardware.
+    /// The fallback chain ensures zero-configuration GPU acceleration:
+    /// CUDA (cuda12/cuda11) → DirectML → CoreML → CPU
+    /// </summary>
+    public IReadOnlyList<string> GetProviderFallbackChain()
+    {
+        var chain = new List<string>();
+
+        if (_gpu is not null)
+        {
+            // CUDA first (if NVIDIA GPU with sufficient driver)
+            if (_gpu.Vendor == GpuVendor.Nvidia)
+            {
+                if (_gpu.CudaDriverVersionMajor >= 12)
+                    chain.Add("cuda12");
+                else if (_gpu.CudaDriverVersionMajor >= 11)
+                    chain.Add("cuda11");
+            }
+
+            // DirectML (Windows with D3D12 support - works with AMD, Intel, NVIDIA)
+            if (_gpu.DirectMLSupported)
+                chain.Add("directml");
+
+            // CoreML (macOS/iOS)
+            if (_gpu.CoreMLSupported)
+                chain.Add("coreml");
+        }
+
+        // CPU always as final fallback
+        chain.Add("cpu");
+
+        return chain;
     }
 
     /// <summary>

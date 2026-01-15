@@ -62,6 +62,33 @@ public sealed record GpuInfo
     };
 
     /// <summary>
+    /// Gets a prioritized list of execution providers to try based on GPU capabilities.
+    /// The fallback chain ensures zero-configuration GPU acceleration:
+    /// CUDA → DirectML → CoreML → CPU
+    /// </summary>
+    public IReadOnlyList<ExecutionProvider> GetFallbackProviders()
+    {
+        var providers = new List<ExecutionProvider>();
+
+        // CUDA first (if NVIDIA with sufficient driver)
+        if (Vendor == GpuVendor.Nvidia && CudaDriverVersionMajor >= 11)
+            providers.Add(ExecutionProvider.Cuda);
+
+        // DirectML (Windows with D3D12)
+        if (DirectMLSupported)
+            providers.Add(ExecutionProvider.DirectML);
+
+        // CoreML (macOS/iOS)
+        if (CoreMLSupported)
+            providers.Add(ExecutionProvider.CoreML);
+
+        // CPU always as final fallback
+        providers.Add(ExecutionProvider.Cpu);
+
+        return providers;
+    }
+
+    /// <summary>
     /// Gets the total GPU memory in megabytes, if available.
     /// </summary>
     public long? TotalMemoryMB => TotalMemoryBytes.HasValue
