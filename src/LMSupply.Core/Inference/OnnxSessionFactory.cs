@@ -232,15 +232,26 @@ public static class OnnxSessionFactory
             }
             catch (Exception ex) when (providerToTry != ExecutionProvider.Cpu)
             {
-                // Try to parse missing library names from CUDA errors
-                var missingLibs = ParseMissingLibrariesFromError(ex.Message);
-                if (missingLibs.Length > 0)
+                // Provide helpful error messages based on the error type
+                if (ex.Message.Contains("CUDNN_STATUS_NOT_INITIALIZED"))
                 {
-                    Console.WriteLine($"[Fallback] {providerToTry}: failed (missing: {string.Join(", ", missingLibs)})");
+                    Console.WriteLine($"[Fallback] {providerToTry}: cuDNN not in PATH. Add cuDNN bin to system PATH.");
+                    Console.WriteLine($"           Example: C:\\Program Files\\NVIDIA\\CUDNN\\v9.x\\bin\\12.x");
                 }
                 else
                 {
-                    Console.WriteLine($"[Fallback] {providerToTry}: failed ({ex.Message})");
+                    // Try to parse missing library names from CUDA errors
+                    var missingLibs = ParseMissingLibrariesFromError(ex.Message);
+                    if (missingLibs.Length > 0)
+                    {
+                        Console.WriteLine($"[Fallback] {providerToTry}: missing {string.Join(", ", missingLibs)}");
+                    }
+                    else
+                    {
+                        // Truncate long error messages
+                        var msg = ex.Message.Length > 100 ? ex.Message[..100] + "..." : ex.Message;
+                        Console.WriteLine($"[Fallback] {providerToTry}: {msg}");
+                    }
                 }
                 triedProviders.Add($"{providerToTry}(error)");
                 lastException = ex;

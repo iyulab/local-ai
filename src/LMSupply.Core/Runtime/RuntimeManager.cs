@@ -103,92 +103,16 @@ public sealed class RuntimeManager : IAsyncDisposable
     /// </summary>
     private void SetupCudaDllSearchPaths()
     {
-        if (!OperatingSystem.IsWindows())
-            return;
-
-        var loader = NativeLoader.Instance;
-        var pathsAdded = false;
-
-        // 1. Add CUDA Toolkit bin directory from CUDA_PATH
-        var cudaPath = Environment.GetEnvironmentVariable("CUDA_PATH");
-        if (!string.IsNullOrEmpty(cudaPath))
-        {
-            var cudaBin = Path.Combine(cudaPath, "bin");
-            if (Directory.Exists(cudaBin))
-            {
-                loader.AddToWindowsDllSearchPath(cudaBin);
-                Debug.WriteLine($"[RuntimeManager] Added CUDA bin to DLL search path: {cudaBin}");
-                pathsAdded = true;
-            }
-        }
-
-        // 2. Try versioned CUDA paths (CUDA_PATH_V12_9, CUDA_PATH_V12_8, etc.)
-        foreach (var envVar in Environment.GetEnvironmentVariables().Keys.Cast<string>())
-        {
-            if (envVar.StartsWith("CUDA_PATH_V", StringComparison.OrdinalIgnoreCase))
-            {
-                var versionedPath = Environment.GetEnvironmentVariable(envVar);
-                if (!string.IsNullOrEmpty(versionedPath))
-                {
-                    var versionedBin = Path.Combine(versionedPath, "bin");
-                    if (Directory.Exists(versionedBin))
-                    {
-                        loader.AddToWindowsDllSearchPath(versionedBin);
-                        Debug.WriteLine($"[RuntimeManager] Added {envVar} bin to DLL search path: {versionedBin}");
-                        pathsAdded = true;
-                    }
-                }
-            }
-        }
-
-        // 3. Add cuDNN paths - check common installation locations
-        var cudnnBasePath = @"C:\Program Files\NVIDIA\CUDNN";
-        if (Directory.Exists(cudnnBasePath))
-        {
-            // Find all cuDNN versions
-            foreach (var versionDir in Directory.GetDirectories(cudnnBasePath, "v*"))
-            {
-                var binDir = Path.Combine(versionDir, "bin");
-                if (Directory.Exists(binDir))
-                {
-                    // Add all CUDA version-specific subdirectories
-                    foreach (var cudaVersionDir in Directory.GetDirectories(binDir))
-                    {
-                        loader.AddToWindowsDllSearchPath(cudaVersionDir);
-                        Debug.WriteLine($"[RuntimeManager] Added cuDNN bin to DLL search path: {cudaVersionDir}");
-                        pathsAdded = true;
-                    }
-                    // Also add the bin directory itself
-                    loader.AddToWindowsDllSearchPath(binDir);
-                    pathsAdded = true;
-                }
-            }
-        }
-
-        // 4. Also check CUDNN_PATH environment variable
-        var cudnnPath = Environment.GetEnvironmentVariable("CUDNN_PATH");
-        if (!string.IsNullOrEmpty(cudnnPath))
-        {
-            var cudnnBin = Path.Combine(cudnnPath, "bin");
-            if (Directory.Exists(cudnnBin))
-            {
-                loader.AddToWindowsDllSearchPath(cudnnBin);
-                Debug.WriteLine($"[RuntimeManager] Added CUDNN_PATH bin to DLL search path: {cudnnBin}");
-                pathsAdded = true;
-            }
-            else if (Directory.Exists(cudnnPath))
-            {
-                // CUDNN_PATH might point directly to bin directory
-                loader.AddToWindowsDllSearchPath(cudnnPath);
-                Debug.WriteLine($"[RuntimeManager] Added CUDNN_PATH to DLL search path: {cudnnPath}");
-                pathsAdded = true;
-            }
-        }
-
-        if (pathsAdded)
-        {
-            Debug.WriteLine("[RuntimeManager] CUDA/cuDNN DLL search paths configured successfully");
-        }
+        // This method is intentionally left minimal.
+        // CUDA/cuDNN must be in system PATH for ONNX Runtime to use them.
+        // We don't modify environment variables as that's unexpected library behavior.
+        //
+        // If CUDA is not available, the fallback chain will use DirectML or CPU.
+        //
+        // To enable CUDA:
+        // 1. Install CUDA Toolkit (adds to PATH automatically)
+        // 2. Install cuDNN and add its bin directory to system PATH
+        //    Example: C:\Program Files\NVIDIA\CUDNN\v9.17\bin\12.9
     }
 
     /// <summary>
