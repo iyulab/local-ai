@@ -235,8 +235,24 @@ public static class OnnxSessionFactory
                 // Provide helpful error messages based on the error type
                 if (ex.Message.Contains("CUDNN_STATUS_NOT_INITIALIZED"))
                 {
-                    Console.WriteLine($"[Fallback] {providerToTry}: cuDNN not in PATH. Add cuDNN bin to system PATH.");
-                    Console.WriteLine($"           Example: C:\\Program Files\\NVIDIA\\CUDNN\\v9.x\\bin\\12.x");
+                    var cudaEnv = Runtime.CudaEnvironment.Instance;
+                    var cuda = cudaEnv.PrimaryCuda;
+                    var cudaMajor = cuda?.MajorVersion ?? 12;
+                    var cudnnMajor = cudaMajor >= 12 ? 9 : 8;
+
+                    Console.WriteLine($"[Fallback] {providerToTry}: cuDNN initialization failed. Ensure cuDNN {cudnnMajor}.x bin is in PATH.");
+
+                    // Show detected cuDNN installations or suggest installation
+                    var cudnn = cudaEnv.GetBestCuDnn(cudaMajor);
+                    if (cudnn is not null)
+                    {
+                        Console.WriteLine($"           Found: cuDNN {cudnn.Version} at {cudnn.BinPath}");
+                        Console.WriteLine($"           Check: zlibwapi.dll may be missing (required for cuDNN 8.3+)");
+                    }
+                    else
+                    {
+                        Console.WriteLine($"           Install cuDNN {cudnnMajor}.x from https://developer.nvidia.com/cudnn");
+                    }
                 }
                 else
                 {
@@ -284,7 +300,7 @@ public static class OnnxSessionFactory
     }
 
     /// <summary>
-    /// Checks CUDA runtime availability using NativeLibrary.TryLoad.
+    /// Checks CUDA runtime availability using CudaEnvironment for dynamic detection.
     /// This works before ONNX Runtime is loaded.
     /// </summary>
     /// <returns>Tuple of (isAvailable, missingLibraries)</returns>
@@ -293,76 +309,43 @@ public static class OnnxSessionFactory
         if (!OperatingSystem.IsWindows() && !OperatingSystem.IsLinux())
             return (false, new[] { "CUDA not supported on this platform" });
 
-        // Get CUDA installation path
-        var cudaPath = Environment.GetEnvironmentVariable("CUDA_PATH");
-        if (string.IsNullOrEmpty(cudaPath))
+        var cudaEnv = Runtime.CudaEnvironment.Instance;
+        cudaEnv.Initialize();
+
+        // Check for CUDA installation
+        var cuda = cudaEnv.PrimaryCuda;
+        if (cuda is null)
         {
-            return (false, new[] { "CUDA_PATH not set" });
+            return (false, new[] { "CUDA_PATH not set or CUDA not installed" });
         }
 
-        var cudaBin = Path.Combine(cudaPath, "bin");
-        if (!Directory.Exists(cudaBin))
-        {
-            return (false, new[] { $"CUDA bin directory not found: {cudaBin}" });
-        }
-
-        // Check for required CUDA libraries
-        var librariesToCheck = new[] { "cublas64_12.dll", "cublasLt64_12.dll" };
+        var cudaMajorVersion = cuda.MajorVersion;
         var missing = new List<string>();
 
-        foreach (var lib in librariesToCheck)
+        // Check for required CUDA libraries (cuBLAS)
+        var (cudaAvailable, cudaMissing) = cudaEnv.CheckCudaLibraries(cudaMajorVersion);
+        if (!cudaAvailable)
         {
-            var libPath = Path.Combine(cudaBin, lib);
-            if (!File.Exists(libPath))
+            missing.AddRange(cudaMissing);
+        }
+
+        // Check for cuDNN (required for CUDA provider)
+        // ONNX Runtime 1.22+ requires cuDNN 9.x for CUDA 12.x
+        var requiredCudnnMajor = cudaMajorVersion >= 12 ? 9 : 8;
+        var (cudnnAvailable, cudnnMissing, _) = cudaEnv.CheckCuDnnLibraries(cudaMajorVersion);
+
+        if (!cudnnAvailable)
+        {
+            // Provide helpful error message with expected DLL name
+            var expectedCudnnDll = Runtime.CudaEnvironment.GetCuDnnLibraryName(requiredCudnnMajor);
+            if (cudnnMissing.Any(m => m.Contains("not found")))
             {
-                missing.Add(lib);
+                missing.Add($"{expectedCudnnDll} (cuDNN {requiredCudnnMajor}.x required for CUDA {cudaMajorVersion}.x)");
             }
-        }
-
-        // Also check for cuDNN (required for CUDA provider)
-        var cudnnDll = "cudnn64_9.dll";
-        bool cudnnFound = false;
-
-        // Check in CUDA bin directory
-        if (File.Exists(Path.Combine(cudaBin, cudnnDll)))
-        {
-            cudnnFound = true;
-        }
-
-        // Check in standard cuDNN installation paths
-        if (!cudnnFound)
-        {
-            var cudnnBasePath = @"C:\Program Files\NVIDIA\CUDNN";
-            if (Directory.Exists(cudnnBasePath))
+            else
             {
-                foreach (var versionDir in Directory.GetDirectories(cudnnBasePath, "v*"))
-                {
-                    var binDir = Path.Combine(versionDir, "bin");
-                    if (Directory.Exists(binDir))
-                    {
-                        // Check CUDA version-specific subdirectories
-                        foreach (var cudaVersionDir in Directory.GetDirectories(binDir))
-                        {
-                            if (File.Exists(Path.Combine(cudaVersionDir, cudnnDll)))
-                            {
-                                cudnnFound = true;
-                                break;
-                            }
-                        }
-                        // Also check bin directory itself
-                        if (!cudnnFound && File.Exists(Path.Combine(binDir, cudnnDll)))
-                        {
-                            cudnnFound = true;
-                        }
-                    }
-                    if (cudnnFound) break;
-                }
+                missing.AddRange(cudnnMissing);
             }
-        }
-
-        if (!cudnnFound)
-        {
-            missing.Add(cudnnDll);
         }
 
         if (missing.Count > 0)
