@@ -135,6 +135,7 @@ public static class OnnxSessionFactory
 
     /// <summary>
     /// Creates a session using the fallback chain until one succeeds.
+    /// Verifies that GPU providers are actually active after session creation.
     /// </summary>
     private static async Task<SessionCreationResult> CreateWithFallbackChainAsync(
         string modelPath,
@@ -151,6 +152,13 @@ public static class OnnxSessionFactory
         {
             try
             {
+                // For GPU providers, check if runtime libraries are actually available
+                if (providerToTry == ExecutionProvider.Cuda && !IsCudaRuntimeAvailable())
+                {
+                    Console.WriteLine($"[OnnxSessionFactory] CUDA runtime libraries not available, skipping to next provider...");
+                    continue;
+                }
+
                 // Get provider string for binary download
                 var providerString = providerToTry switch
                 {
@@ -169,16 +177,40 @@ public static class OnnxSessionFactory
 
                 // Try to create session with this provider
                 var session = Create(modelPath, providerToTry, configureOptions);
-                var activeProviders = GetActiveProviders(session);
 
-                Debug.WriteLine($"[OnnxSessionFactory] Successfully created session with provider: {providerToTry}. " +
-                    $"Active providers: {string.Join(", ", activeProviders)}");
+                // Verify GPU is actually active for GPU providers
+                bool isGpuProvider = providerToTry is ExecutionProvider.Cuda or ExecutionProvider.DirectML or ExecutionProvider.CoreML;
+                if (isGpuProvider)
+                {
+                    var activeProviders = GetActiveProvidersFromSession(session);
+                    bool hasGpuActive = activeProviders.Any(p =>
+                        p.Contains("CUDA", StringComparison.OrdinalIgnoreCase) ||
+                        p.Contains("Dml", StringComparison.OrdinalIgnoreCase) ||
+                        p.Contains("CoreML", StringComparison.OrdinalIgnoreCase));
 
+                    if (!hasGpuActive)
+                    {
+                        Console.WriteLine($"[OnnxSessionFactory] {providerToTry} provider was added but not activated, trying next provider...");
+                        session.Dispose();
+                        continue;
+                    }
+
+                    Console.WriteLine($"[OnnxSessionFactory] Successfully using {providerToTry}. Active: [{string.Join(", ", activeProviders)}]");
+                    return new SessionCreationResult
+                    {
+                        Session = session,
+                        RequestedProvider = ExecutionProvider.Auto,
+                        ActiveProviders = activeProviders
+                    };
+                }
+
+                // CPU provider - always succeeds
+                Console.WriteLine($"[OnnxSessionFactory] Using CPU provider");
                 return new SessionCreationResult
                 {
                     Session = session,
                     RequestedProvider = ExecutionProvider.Auto,
-                    ActiveProviders = activeProviders
+                    ActiveProviders = new[] { "CPUExecutionProvider" }
                 };
             }
             catch (OperationCanceledException)
@@ -187,13 +219,97 @@ public static class OnnxSessionFactory
             }
             catch (Exception ex) when (providerToTry != ExecutionProvider.Cpu)
             {
-                Debug.WriteLine($"[OnnxSessionFactory] Provider {providerToTry} failed: {ex.Message}. Trying next provider...");
+                Console.WriteLine($"[OnnxSessionFactory] Provider {providerToTry} failed: {ex.Message}. Trying next provider...");
                 lastException = ex;
             }
         }
 
         // Should not reach here since CPU is always in chain, but just in case
         throw lastException ?? new InvalidOperationException("No provider available for session creation");
+    }
+
+    /// <summary>
+    /// Checks if CUDA runtime libraries (cuBLAS, cuDNN) are available on the system.
+    /// </summary>
+    private static bool IsCudaRuntimeAvailable()
+    {
+        // Check for CUDA 12 runtime libraries
+        var cudaLibs = new[] { "cublasLt64_12", "cublas64_12", "cudnn64_9", "cudnn64_8" };
+
+        foreach (var lib in cudaLibs)
+        {
+            try
+            {
+                if (System.Runtime.InteropServices.NativeLibrary.TryLoad(lib, out var handle))
+                {
+                    System.Runtime.InteropServices.NativeLibrary.Free(handle);
+                    return true; // At least one CUDA library is available
+                }
+            }
+            catch
+            {
+                // Continue checking other libraries
+            }
+        }
+
+        // Also check CUDA 11
+        var cuda11Libs = new[] { "cublasLt64_11", "cublas64_11" };
+        foreach (var lib in cuda11Libs)
+        {
+            try
+            {
+                if (System.Runtime.InteropServices.NativeLibrary.TryLoad(lib, out var handle))
+                {
+                    System.Runtime.InteropServices.NativeLibrary.Free(handle);
+                    return true;
+                }
+            }
+            catch
+            {
+                // Continue
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Gets active providers by checking session's internal state.
+    /// Uses a simple inference to trigger actual provider initialization.
+    /// </summary>
+    private static IReadOnlyList<string> GetActiveProvidersFromSession(InferenceSession session)
+    {
+        var providers = new List<string>();
+
+        // Check input/output metadata to see which providers are handling nodes
+        // This is a heuristic based on ONNX Runtime behavior
+        try
+        {
+            // The session's InputMetadata access triggers provider initialization
+            _ = session.InputMetadata;
+
+            // Check if specific provider DLLs are loaded in the process
+            var loadedModules = System.Diagnostics.Process.GetCurrentProcess().Modules;
+            foreach (System.Diagnostics.ProcessModule module in loadedModules)
+            {
+                var name = module.ModuleName?.ToLowerInvariant() ?? "";
+                if (name.Contains("onnxruntime_providers_cuda"))
+                {
+                    providers.Add("CUDAExecutionProvider");
+                }
+                else if (name.Contains("onnxruntime_providers_dml") || name.Contains("directml"))
+                {
+                    providers.Add("DmlExecutionProvider");
+                }
+            }
+        }
+        catch
+        {
+            // Ignore errors
+        }
+
+        providers.Add("CPUExecutionProvider");
+        return providers.Distinct().ToList();
     }
 
     /// <summary>

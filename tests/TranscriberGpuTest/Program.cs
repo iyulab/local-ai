@@ -5,6 +5,21 @@ using LMSupply.Transcriber;
 
 Console.WriteLine("=== LMSupply Transcriber GPU Test ===\n");
 
+// Parse provider argument
+var providerArg = args.FirstOrDefault(a => a.StartsWith("--provider="));
+var requestedProvider = ExecutionProvider.Auto;
+if (providerArg != null)
+{
+    var providerName = providerArg.Split('=')[1].ToLower();
+    requestedProvider = providerName switch
+    {
+        "cuda" => ExecutionProvider.Cuda,
+        "directml" or "dml" => ExecutionProvider.DirectML,
+        "cpu" => ExecutionProvider.Cpu,
+        _ => ExecutionProvider.Auto
+    };
+}
+
 // 1. 환경 감지 테스트
 Console.WriteLine("## 1. Environment Detection");
 await RuntimeManager.Instance.InitializeAsync();
@@ -14,13 +29,13 @@ Console.WriteLine($"Recommended Provider: {RuntimeManager.Instance.RecommendedPr
 Console.WriteLine($"Fallback Chain: {string.Join(" -> ", RuntimeManager.Instance.GetProviderFallbackChain())}");
 Console.WriteLine();
 
-// 2. 모델 로드 테스트 (Auto 모드)
-Console.WriteLine("## 2. Model Load Test (Auto Mode)");
-Console.WriteLine("Loading 'default' model with Auto provider...");
+// 2. 모델 로드 테스트
+Console.WriteLine($"## 2. Model Load Test (Provider: {requestedProvider})");
+Console.WriteLine($"Loading 'default' model with {requestedProvider} provider...");
 
 var options = new TranscriberOptions
 {
-    Provider = ExecutionProvider.Auto  // 기본값
+    Provider = requestedProvider
 };
 
 var sw = Stopwatch.StartNew();
