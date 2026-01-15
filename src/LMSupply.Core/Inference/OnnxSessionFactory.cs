@@ -95,9 +95,9 @@ public static class OnnxSessionFactory
         // Explicit provider specified - use single provider with CPU fallback
         var providerString = provider switch
         {
-            ExecutionProvider.Cuda => RuntimeManager.Instance.GetDefaultProvider(),
+            ExecutionProvider.Cuda => "cuda12",  // Try CUDA 12 first
             ExecutionProvider.DirectML => "directml",
-            ExecutionProvider.CoreML => "cpu",
+            ExecutionProvider.CoreML => "coreml",
             _ => "cpu"
         };
 
@@ -169,9 +169,9 @@ public static class OnnxSessionFactory
                 // Get provider string for binary download
                 var providerString = providerToTry switch
                 {
-                    ExecutionProvider.Cuda => RuntimeManager.Instance.GetDefaultProvider(),
+                    ExecutionProvider.Cuda => "cuda12",  // Try CUDA 12 first
                     ExecutionProvider.DirectML => "directml",
-                    ExecutionProvider.CoreML => "cpu",
+                    ExecutionProvider.CoreML => "coreml",
                     _ => "cpu"
                 };
 

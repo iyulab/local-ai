@@ -26,6 +26,42 @@ string? requestedLanguage = languageArg?.Split('=')[1];
 
 // 1. 환경 감지 테스트
 Console.WriteLine("## 1. Environment Detection");
+
+// CUDA environment diagnostics
+var cudaPath = Environment.GetEnvironmentVariable("CUDA_PATH");
+Console.WriteLine($"CUDA_PATH: {cudaPath ?? "(not set)"}");
+if (!string.IsNullOrEmpty(cudaPath))
+{
+    var cudaBin = Path.Combine(cudaPath, "bin");
+    var cuBlasLt = Path.Combine(cudaBin, "cublasLt64_12.dll");
+    Console.WriteLine($"  bin dir exists: {Directory.Exists(cudaBin)}");
+    Console.WriteLine($"  cublasLt64_12.dll exists: {File.Exists(cuBlasLt)}");
+}
+
+// Check for versioned CUDA paths
+var cudaPathVars = Environment.GetEnvironmentVariables()
+    .Keys.Cast<string>()
+    .Where(k => k.StartsWith("CUDA_PATH_V", StringComparison.OrdinalIgnoreCase))
+    .OrderByDescending(k => k)
+    .ToList();
+if (cudaPathVars.Count > 0)
+{
+    Console.WriteLine($"Versioned CUDA paths: {string.Join(", ", cudaPathVars)}");
+}
+
+// Check cuDNN
+var cudnnPath = @"C:\Program Files\NVIDIA\CUDNN";
+if (Directory.Exists(cudnnPath))
+{
+    var cudnnVersions = Directory.GetDirectories(cudnnPath, "v*").Select(Path.GetFileName);
+    Console.WriteLine($"cuDNN versions found: {string.Join(", ", cudnnVersions)}");
+}
+else
+{
+    Console.WriteLine("cuDNN directory not found");
+}
+Console.WriteLine();
+
 await RuntimeManager.Instance.InitializeAsync();
 Console.WriteLine($"Platform: {RuntimeManager.Instance.Platform}");
 Console.WriteLine($"GPU: {RuntimeManager.Instance.Gpu}");
