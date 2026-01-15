@@ -7,6 +7,7 @@ namespace LMSupply.Runtime;
 /// <summary>
 /// Handles dynamic native library loading using AssemblyLoadContext.ResolvingUnmanagedDll.
 /// This approach is cleaner than SetDllDirectory and works cross-platform.
+/// Also supports Windows AddDllDirectory for native-to-native dependency resolution.
 /// </summary>
 public sealed class NativeLoader : IDisposable
 {
@@ -16,9 +17,27 @@ public sealed class NativeLoader : IDisposable
     private readonly Dictionary<string, string> _libraryPaths = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, IntPtr> _loadedLibraries = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<Assembly> _registeredAssemblies = new();
+    private readonly HashSet<string> _addedDllDirectories = new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<IntPtr> _dllDirectoryCookies = new();
     private readonly object _lock = new();
 
     private bool _isRegistered;
+    private bool _dllSearchPathModified;
+
+    // Windows API for DLL search path modification
+    // These are used to add directories to the DLL search path for native-to-native dependencies
+    private const uint LOAD_LIBRARY_SEARCH_DEFAULT_DIRS = 0x00001000;
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern IntPtr AddDllDirectory(string newDirectory);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool RemoveDllDirectory(IntPtr cookie);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetDefaultDllDirectories(uint directoryFlags);
 
     /// <summary>
     /// Gets the singleton instance of the native loader.
@@ -91,6 +110,9 @@ public sealed class NativeLoader : IDisposable
 
         lock (_lock)
         {
+            // On Windows, add the directory to the DLL search path for native-to-native dependencies
+            AddToWindowsDllSearchPath(directory);
+
             var extensions = GetNativeLibraryExtensions();
             var libraries = new List<(string name, string path)>();
 
@@ -126,6 +148,59 @@ public sealed class NativeLoader : IDisposable
                 {
                     PreloadLibrary(name, path);
                 }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Adds a directory to the Windows DLL search path.
+    /// This enables native DLLs to find their native dependencies in other registered directories.
+    /// On non-Windows platforms, this method does nothing.
+    /// </summary>
+    /// <param name="directory">The directory to add to the DLL search path.</param>
+    public void AddToWindowsDllSearchPath(string directory)
+    {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            return;
+
+        if (string.IsNullOrEmpty(directory) || !Directory.Exists(directory))
+            return;
+
+        var fullPath = Path.GetFullPath(directory);
+
+        lock (_lock)
+        {
+            // Skip if already added
+            if (_addedDllDirectories.Contains(fullPath))
+                return;
+
+            // First time: set up the search order to use application + system + user directories
+            if (!_dllSearchPathModified)
+            {
+                try
+                {
+                    SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
+                    _dllSearchPathModified = true;
+                }
+                catch
+                {
+                    // Ignore - SetDefaultDllDirectories may not be available on older Windows
+                }
+            }
+
+            // Add the directory to the DLL search path
+            try
+            {
+                var cookie = AddDllDirectory(fullPath);
+                if (cookie != IntPtr.Zero)
+                {
+                    _addedDllDirectories.Add(fullPath);
+                    _dllDirectoryCookies.Add(cookie);
+                }
+            }
+            catch
+            {
+                // Ignore - AddDllDirectory may fail in some environments
             }
         }
     }
@@ -360,6 +435,27 @@ public sealed class NativeLoader : IDisposable
                         // Ignore unload errors
                     }
                 }
+            }
+
+            // Remove added DLL directories on Windows
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                foreach (var cookie in _dllDirectoryCookies)
+                {
+                    if (cookie != IntPtr.Zero)
+                    {
+                        try
+                        {
+                            RemoveDllDirectory(cookie);
+                        }
+                        catch
+                        {
+                            // Ignore removal errors
+                        }
+                    }
+                }
+                _dllDirectoryCookies.Clear();
+                _addedDllDirectories.Clear();
             }
 
             _loadedLibraries.Clear();

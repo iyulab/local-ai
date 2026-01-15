@@ -332,16 +332,24 @@ internal sealed class OnnxTranscriberModel : ITranscriberModel
                     "Check CUDA/DirectML installation and GPU availability.");
             }
 
-            // Load decoder if available
+            // Load decoder if available - use same provider as encoder
             var decoderPath = Path.Combine(modelPath, _modelInfo.DecoderFile);
             if (File.Exists(decoderPath))
             {
-                _decoderSession = await OnnxSessionFactory.CreateAsync(
+                var decoderSessionInfo = await OnnxSessionFactory.CreateWithInfoAsync(
                     decoderPath,
                     _options.Provider,
                     ConfigureSessionOptions,
                     cancellationToken: cancellationToken);
-                Debug.WriteLine($"[OnnxTranscriberModel] Decoder loaded from: {decoderPath}");
+                _decoderSession = decoderSessionInfo.Session;
+
+                Debug.WriteLine($"[OnnxTranscriberModel] Decoder loaded - Requested: {decoderSessionInfo.RequestedProvider}, " +
+                    $"Active providers: [{string.Join(", ", decoderSessionInfo.ActiveProviders)}], GPU active: {decoderSessionInfo.IsGpuActive}");
+
+                if (_options.Provider != ExecutionProvider.Cpu && !decoderSessionInfo.IsGpuActive)
+                {
+                    Debug.WriteLine("[OnnxTranscriberModel] WARNING: Decoder GPU provider was requested but only CPU is active.");
+                }
             }
 
             // Store model path and load tokenizer

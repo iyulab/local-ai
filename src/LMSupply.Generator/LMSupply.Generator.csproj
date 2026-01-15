@@ -24,7 +24,8 @@
 
   <ItemGroup>
     <!-- ONNX Runtime GenAI - CPU only by default, GPU packages installed separately -->
-    <PackageReference Include="Microsoft.ML.OnnxRuntimeGenAI" />
+    <!-- ExcludeAssets="native" ensures native binaries are downloaded on-demand via RuntimeManager -->
+    <PackageReference Include="Microsoft.ML.OnnxRuntimeGenAI" ExcludeAssets="native" />
   </ItemGroup>
 
   <ItemGroup>

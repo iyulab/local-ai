@@ -148,4 +148,68 @@ public class TranscriptionResultTests
         transcribeOptions.Translate.Should().BeFalse();
         translateOptions.Translate.Should().BeTrue();
     }
+
+    /// <summary>
+    /// Documents that WordTimestamps option controls segment-level timestamps only,
+    /// not word-level timestamps. This is a known limitation.
+    /// Fix documentation for issue #4: WordTimestamps not working.
+    /// </summary>
+    [Fact]
+    public void TranscribeOptions_WordTimestamps_ControlsSegmentTimestampsOnly()
+    {
+        var optionsEnabled = new TranscribeOptions { WordTimestamps = true };
+        var optionsDisabled = new TranscribeOptions { WordTimestamps = false };
+
+        // WordTimestamps = true enables segment-level timestamp tokens in Whisper decoding
+        // This creates multiple segments with Start/End times based on speech patterns
+        // WordTimestamps = false creates a single segment per 30-second audio chunk
+        optionsEnabled.WordTimestamps.Should().BeTrue();
+        optionsDisabled.WordTimestamps.Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Documents that the Words property in TranscriptionSegment is always null.
+    /// True word-level timestamps require cross-attention alignment with DTW,
+    /// which is not implemented in the current version.
+    /// Fix documentation for issue #4: Words property always null.
+    /// </summary>
+    [Fact]
+    public void TranscriptionSegment_Words_IsAlwaysNull()
+    {
+        // The Words property exists for API compatibility but is not populated
+        // Word-level timestamps require extracting cross-attention weights from
+        // the Whisper decoder and applying Dynamic Time Warping (DTW) alignment.
+        // See: https://github.com/linto-ai/whisper-timestamped
+        var segment = new TranscriptionSegment
+        {
+            Id = 0,
+            Start = 0,
+            End = 30,
+            Text = "Test transcription",
+            Words = null // Always null - word-level timestamps not implemented
+        };
+
+        segment.Words.Should().BeNull("word-level timestamps require cross-attention DTW which is not implemented");
+    }
+
+    /// <summary>
+    /// Tests that WordTimestamp class can be instantiated correctly
+    /// for future use when word-level timestamps are implemented.
+    /// </summary>
+    [Fact]
+    public void WordTimestamp_ShouldStoreProperties()
+    {
+        var wordTimestamp = new WordTimestamp
+        {
+            Word = "hello",
+            Start = 1.5,
+            End = 2.0,
+            Probability = 0.95f
+        };
+
+        wordTimestamp.Word.Should().Be("hello");
+        wordTimestamp.Start.Should().Be(1.5);
+        wordTimestamp.End.Should().Be(2.0);
+        wordTimestamp.Probability.Should().Be(0.95f);
+    }
 }

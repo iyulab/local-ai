@@ -18,6 +18,21 @@ public interface ITranscriberModel : IAsyncDisposable
     string? Language { get; }
 
     /// <summary>
+    /// Gets whether GPU acceleration is being used for inference.
+    /// </summary>
+    bool IsGpuActive { get; }
+
+    /// <summary>
+    /// Gets the list of active execution providers.
+    /// </summary>
+    IReadOnlyList<string> ActiveProviders { get; }
+
+    /// <summary>
+    /// Gets the execution provider that was requested.
+    /// </summary>
+    ExecutionProvider RequestedProvider { get; }
+
+    /// <summary>
     /// Warms up the model by running a dummy inference.
     /// </summary>
     /// <param name="cancellationToken">Cancellation token.</param>

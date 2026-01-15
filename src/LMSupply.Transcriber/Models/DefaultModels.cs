@@ -99,24 +99,25 @@ public static class DefaultModels
     };
 
     /// <summary>
-    /// Whisper Large V3 - Highest quality model.
-    /// MIT license, 1550M params, ~6GB.
+    /// Whisper Large V3 Turbo - Best balance of quality and speed for "large" alias.
+    /// MIT license, 809M params, ~3GB. 8x faster than original Large V3.
+    /// Note: Original whisper-large-v3 is gated and requires HuggingFace authentication.
     /// </summary>
     public static TranscriberModelInfo WhisperLargeV3 { get; } = new()
     {
-        Id = "onnx-community/whisper-large-v3",
+        Id = "onnx-community/whisper-large-v3-turbo",
         Alias = "large",
-        DisplayName = "Whisper Large V3",
+        DisplayName = "Whisper Large V3 Turbo",
         Architecture = "Whisper",
-        ParametersM = 1550f,
-        SizeBytes = 6_000_000_000,
-        WerLibriSpeech = 2.5f,
+        ParametersM = 809f,
+        SizeBytes = 3_200_000_000,
+        WerLibriSpeech = 2.7f,
         MaxDurationSeconds = 30,
         SampleRate = 16000,
         NumMelBins = 128, // Large V3 uses 128 mel bins
         HiddenSize = 1280,
         IsMultilingual = true,
-        Description = "Whisper Large V3 for highest quality transcription.",
+        Description = "Whisper Large V3 Turbo for highest quality transcription. 8x faster than original V3.",
         License = "MIT",
         DecoderFile = "decoder_model_merged.onnx"
     };

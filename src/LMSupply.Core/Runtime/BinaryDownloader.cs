@@ -86,10 +86,10 @@ public sealed class BinaryDownloader : IDisposable
 
             try
             {
-                // Extract if archive
-                if (IsArchive(entry.Url))
+                // Extract if archive or if innerPath is specified (e.g., NuGet packages without .nupkg extension)
+                if (IsArchive(entry.Url) || !string.IsNullOrEmpty(entry.InnerPath))
                 {
-                    await ExtractArchiveAsync(downloadPath, targetDirectory, entry.FileName, cancellationToken);
+                    await ExtractArchiveAsync(downloadPath, targetDirectory, entry.FileName, entry.InnerPath, cancellationToken);
                 }
                 else
                 {
@@ -222,11 +222,12 @@ public sealed class BinaryDownloader : IDisposable
         string archivePath,
         string targetDirectory,
         string targetFileName,
+        string? innerPath,
         CancellationToken cancellationToken)
     {
         var extension = Path.GetExtension(archivePath).ToLowerInvariant();
 
-        if (extension == ".zip")
+        if (extension is ".zip" or ".nupkg")
         {
             await Task.Run(() =>
             {
@@ -239,10 +240,26 @@ public sealed class BinaryDownloader : IDisposable
                     if (string.IsNullOrEmpty(zipEntry.Name))
                         continue;
 
-                    // Extract only the target file or files in native directory
-                    if (zipEntry.Name.Equals(targetFileName, StringComparison.OrdinalIgnoreCase) ||
-                        zipEntry.FullName.Contains("/lib/", StringComparison.OrdinalIgnoreCase) ||
-                        zipEntry.FullName.Contains("\\lib\\", StringComparison.OrdinalIgnoreCase))
+                    bool shouldExtract;
+
+                    if (!string.IsNullOrEmpty(innerPath))
+                    {
+                        // NuGet package: extract from specific inner path
+                        // e.g., "runtimes/win-x64/native" -> extract files from that directory
+                        var normalizedPath = zipEntry.FullName.Replace('\\', '/');
+                        var normalizedInnerPath = innerPath.Replace('\\', '/').TrimEnd('/');
+                        shouldExtract = normalizedPath.StartsWith(normalizedInnerPath + "/", StringComparison.OrdinalIgnoreCase);
+                    }
+                    else
+                    {
+                        // Standard archive: extract target file or files in native/lib directory
+                        shouldExtract =
+                            zipEntry.Name.Equals(targetFileName, StringComparison.OrdinalIgnoreCase) ||
+                            zipEntry.FullName.Contains("/lib/", StringComparison.OrdinalIgnoreCase) ||
+                            zipEntry.FullName.Contains("\\lib\\", StringComparison.OrdinalIgnoreCase);
+                    }
+
+                    if (shouldExtract)
                     {
                         var destPath = Path.Combine(targetDirectory, zipEntry.Name);
 
@@ -313,7 +330,7 @@ public sealed class BinaryDownloader : IDisposable
     private static bool IsArchive(string url)
     {
         var extension = Path.GetExtension(url).ToLowerInvariant();
-        return extension is ".zip" or ".tgz" or ".gz" or ".tar";
+        return extension is ".zip" or ".tgz" or ".gz" or ".tar" or ".nupkg";
     }
 
     private static string GetArchiveExtension(string url)
@@ -322,6 +339,12 @@ public sealed class BinaryDownloader : IDisposable
             return ".tar.gz";
         if (url.EndsWith(".tgz", StringComparison.OrdinalIgnoreCase))
             return ".tgz";
+
+        // NuGet API URLs use version numbers at the end (e.g., /0.9.0) which Path.GetExtension
+        // incorrectly interprets as ".0" extension. Check for NuGet URLs first.
+        if (url.Contains("nuget.org/api", StringComparison.OrdinalIgnoreCase))
+            return ".nupkg";
+
         return Path.GetExtension(url);
     }
 

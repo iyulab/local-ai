@@ -226,10 +226,12 @@ public static class OnnxSessionFactory
         try
         {
             options.AppendExecutionProvider_CUDA();
+            Debug.WriteLine("[OnnxSessionFactory] CUDA provider added successfully");
             return true;
         }
-        catch
+        catch (Exception ex)
         {
+            Debug.WriteLine($"[OnnxSessionFactory] Failed to add CUDA provider: {ex.Message}");
             return false;
         }
     }
@@ -239,10 +241,12 @@ public static class OnnxSessionFactory
         try
         {
             options.AppendExecutionProvider_DML();
+            Debug.WriteLine("[OnnxSessionFactory] DirectML provider added successfully");
             return true;
         }
-        catch
+        catch (Exception ex)
         {
+            Debug.WriteLine($"[OnnxSessionFactory] Failed to add DirectML provider: {ex.Message}");
             return false;
         }
     }

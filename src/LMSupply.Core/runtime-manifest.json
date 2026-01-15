@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "updated": "2025-01-08T00:00:00Z",
+  "updated": "2025-01-15T00:00:00Z",
   "packages": {
     "onnxruntime": {
       "description": "ONNX Runtime for cross-platform machine learning inference",
@@ -21,11 +21,29 @@
             {
               "rid": "win-x64",
               "provider": "cuda12",
-              "url": "https://github.com/microsoft/onnxruntime/releases/download/v1.23.2/onnxruntime-win-x64-gpu-cuda12-1.23.2.zip",
+              "url": "https://github.com/microsoft/onnxruntime/releases/download/v1.23.2/onnxruntime-win-x64-gpu-1.23.2.zip",
               "fileName": "onnxruntime.dll",
               "size": 220000000,
               "sha256": "placeholder-will-be-updated",
               "dependencies": ["onnxruntime_providers_cuda.dll", "onnxruntime_providers_shared.dll"]
+            },
+            {
+              "rid": "win-x64",
+              "provider": "directml",
+              "url": "https://www.nuget.org/api/v2/package/Microsoft.ML.OnnxRuntime.DirectML/1.20.1",
+              "fileName": "onnxruntime.dll",
+              "size": 14682160,
+              "sha256": "placeholder-will-be-updated",
+              "innerPath": "runtimes/win-x64/native"
+            },
+            {
+              "rid": "win-arm64",
+              "provider": "directml",
+              "url": "https://www.nuget.org/api/v2/package/Microsoft.ML.OnnxRuntime.DirectML/1.20.1",
+              "fileName": "onnxruntime.dll",
+              "size": 15161888,
+              "sha256": "placeholder-will-be-updated",
+              "innerPath": "runtimes/win-arm64/native"
             },
             {
               "rid": "linux-x64",
@@ -38,7 +56,7 @@
             {
               "rid": "linux-x64",
               "provider": "cuda12",
-              "url": "https://github.com/microsoft/onnxruntime/releases/download/v1.23.2/onnxruntime-linux-x64-gpu-cuda12-1.23.2.tgz",
+              "url": "https://github.com/microsoft/onnxruntime/releases/download/v1.23.2/onnxruntime-linux-x64-gpu-1.23.2.tgz",
               "fileName": "libonnxruntime.so.1.23.2",
               "size": 210000000,
               "sha256": "placeholder-will-be-updated",
@@ -100,6 +118,24 @@
               "dependencies": ["onnxruntime_providers_cuda.dll", "onnxruntime_providers_shared.dll"]
             },
             {
+              "rid": "win-x64",
+              "provider": "directml",
+              "url": "https://www.nuget.org/api/v2/package/Microsoft.ML.OnnxRuntime.DirectML/1.20.1",
+              "fileName": "onnxruntime.dll",
+              "size": 14682160,
+              "sha256": "placeholder-will-be-updated",
+              "innerPath": "runtimes/win-x64/native"
+            },
+            {
+              "rid": "win-arm64",
+              "provider": "directml",
+              "url": "https://www.nuget.org/api/v2/package/Microsoft.ML.OnnxRuntime.DirectML/1.20.1",
+              "fileName": "onnxruntime.dll",
+              "size": 15161888,
+              "sha256": "placeholder-will-be-updated",
+              "innerPath": "runtimes/win-arm64/native"
+            },
+            {
               "rid": "linux-x64",
               "provider": "cpu",
               "url": "https://github.com/microsoft/onnxruntime/releases/download/v1.20.1/onnxruntime-linux-x64-1.20.1.tgz",
@@ -147,6 +183,101 @@
               "fileName": "onnxruntime.dll",
               "size": 10000000,
               "sha256": "placeholder-will-be-updated"
+            }
+          ]
+        }
+      }
+    },
+    "onnxruntime-genai": {
+      "description": "ONNX Runtime GenAI for LLM text generation",
+      "homepage": "https://github.com/microsoft/onnxruntime-genai",
+      "versions": {
+        "0.9.0": {
+          "released": "2025-08-05T00:00:00Z",
+          "releaseNotes": "https://github.com/microsoft/onnxruntime-genai/releases/tag/v0.9.0",
+          "binaries": [
+            {
+              "rid": "win-x64",
+              "provider": "cpu",
+              "url": "https://www.nuget.org/api/v2/package/Microsoft.ML.OnnxRuntimeGenAI/0.9.0",
+              "fileName": "onnxruntime-genai.dll",
+              "size": 5304832,
+              "sha256": "placeholder-will-be-updated",
+              "innerPath": "runtimes/win-x64/native"
+            },
+            {
+              "rid": "win-arm64",
+              "provider": "cpu",
+              "url": "https://www.nuget.org/api/v2/package/Microsoft.ML.OnnxRuntimeGenAI/0.9.0",
+              "fileName": "onnxruntime-genai.dll",
+              "size": 5194288,
+              "sha256": "placeholder-will-be-updated",
+              "innerPath": "runtimes/win-arm64/native"
+            },
+            {
+              "rid": "linux-x64",
+              "provider": "cpu",
+              "url": "https://www.nuget.org/api/v2/package/Microsoft.ML.OnnxRuntimeGenAI/0.9.0",
+              "fileName": "libonnxruntime-genai.so",
+              "size": 29349512,
+              "sha256": "placeholder-will-be-updated",
+              "innerPath": "runtimes/linux-x64/native"
+            },
+            {
+              "rid": "osx-x64",
+              "provider": "cpu",
+              "url": "https://www.nuget.org/api/v2/package/Microsoft.ML.OnnxRuntimeGenAI/0.9.0",
+              "fileName": "libonnxruntime-genai.dylib",
+              "size": 9082640,
+              "sha256": "placeholder-will-be-updated",
+              "innerPath": "runtimes/osx-x64/native"
+            },
+            {
+              "rid": "osx-arm64",
+              "provider": "cpu",
+              "url": "https://www.nuget.org/api/v2/package/Microsoft.ML.OnnxRuntimeGenAI/0.9.0",
+              "fileName": "libonnxruntime-genai.dylib",
+              "size": 8801440,
+              "sha256": "placeholder-will-be-updated",
+              "innerPath": "runtimes/osx-arm64/native"
+            },
+            {
+              "rid": "win-x64",
+              "provider": "directml",
+              "url": "https://www.nuget.org/api/v2/package/Microsoft.ML.OnnxRuntimeGenAI.DirectML/0.9.0",
+              "fileName": "onnxruntime-genai.dll",
+              "size": 5373440,
+              "sha256": "placeholder-will-be-updated",
+              "innerPath": "runtimes/win-x64/native"
+            },
+            {
+              "rid": "win-arm64",
+              "provider": "directml",
+              "url": "https://www.nuget.org/api/v2/package/Microsoft.ML.OnnxRuntimeGenAI.DirectML/0.9.0",
+              "fileName": "onnxruntime-genai.dll",
+              "size": 5272120,
+              "sha256": "placeholder-will-be-updated",
+              "innerPath": "runtimes/win-arm64/native"
+            },
+            {
+              "rid": "win-x64",
+              "provider": "cuda12",
+              "url": "https://www.nuget.org/api/v2/package/Microsoft.ML.OnnxRuntimeGenAI.Cuda/0.9.0",
+              "fileName": "onnxruntime-genai.dll",
+              "size": 5287424,
+              "sha256": "placeholder-will-be-updated",
+              "innerPath": "runtimes/win-x64/native",
+              "dependencies": ["onnxruntime-genai-cuda.dll"]
+            },
+            {
+              "rid": "linux-x64",
+              "provider": "cuda12",
+              "url": "https://www.nuget.org/api/v2/package/Microsoft.ML.OnnxRuntimeGenAI.Cuda/0.9.0",
+              "fileName": "libonnxruntime-genai.so",
+              "size": 28977776,
+              "sha256": "placeholder-will-be-updated",
+              "innerPath": "runtimes/linux-x64/native",
+              "dependencies": ["libonnxruntime-genai-cuda.so"]
             }
           ]
         }

@@ -62,8 +62,16 @@ public sealed class TranscribeOptions
     public bool Translate { get; set; }
 
     /// <summary>
-    /// Gets or sets whether to include word-level timestamps.
-    /// <para>Default: false</para>
+    /// Gets or sets whether to enable segment-level timestamps in the transcription.
+    /// When true, the model generates timestamp tokens that create natural segment breaks
+    /// based on speech patterns. Each segment will have Start and End timestamps.
+    /// <para>
+    /// <b>Note:</b> This controls segment-level timestamps, not word-level timestamps.
+    /// True word-level timestamps (the Words property in TranscriptionSegment) require
+    /// cross-attention alignment with DTW which is not currently implemented.
+    /// See https://github.com/linto-ai/whisper-timestamped for reference.
+    /// </para>
+    /// <para>Default: false (creates single segment per 30-second chunk)</para>
     /// </summary>
     public bool WordTimestamps { get; set; }
 
