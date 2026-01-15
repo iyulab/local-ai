@@ -30,7 +30,7 @@
             {
               "rid": "win-x64",
               "provider": "directml",
-              "url": "https://www.nuget.org/api/v2/package/Microsoft.ML.OnnxRuntime.DirectML/1.20.1",
+              "url": "https://www.nuget.org/api/v2/package/Microsoft.ML.OnnxRuntime.DirectML/1.23.0",
               "fileName": "onnxruntime.dll",
               "size": 14682160,
               "sha256": "placeholder-will-be-updated",
@@ -39,7 +39,7 @@
             {
               "rid": "win-arm64",
               "provider": "directml",
-              "url": "https://www.nuget.org/api/v2/package/Microsoft.ML.OnnxRuntime.DirectML/1.20.1",
+              "url": "https://www.nuget.org/api/v2/package/Microsoft.ML.OnnxRuntime.DirectML/1.23.0",
               "fileName": "onnxruntime.dll",
               "size": 15161888,
               "sha256": "placeholder-will-be-updated",
