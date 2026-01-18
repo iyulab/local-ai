@@ -264,18 +264,13 @@ var generator = await TextGeneratorBuilder.Create()
 
 ## GPU Support
 
-Install the appropriate ONNX Runtime package:
+GPU acceleration is **automatic** — LMSupply detects your hardware and downloads appropriate runtime binaries on first use:
 
-```bash
-# NVIDIA CUDA
-dotnet add package Microsoft.ML.OnnxRuntime.Gpu
+- **NVIDIA CUDA**: Automatically detected and used
+- **Windows DirectML**: AMD, Intel, NVIDIA via Direct3D
+- **macOS CoreML**: Apple Silicon optimization
 
-# Windows (AMD, Intel, NVIDIA)
-dotnet add package Microsoft.ML.OnnxRuntime.DirectML
-
-# macOS Apple Silicon
-dotnet add package Microsoft.ML.OnnxRuntime.CoreML
-```
+No additional packages required. Use `ExecutionProvider.Auto` (default) or force specific provider in options.
 
 ## GGUF Model Support
 
@@ -379,6 +374,34 @@ await foreach (var token in model.GenerateAsync(prompt, genOptions))
     Console.Write(token);
 }
 ```
+
+### Reasoning Model Support (DeepSeek R1)
+
+For reasoning models like DeepSeek R1 that output `<think>...</think>` tags:
+
+```csharp
+await using var model = await LocalGenerator.LoadAsync("gguf:reasoning");
+
+// Option 1: Filter reasoning tokens (only show final answer)
+var options = new GenerationOptions
+{
+    FilterReasoningTokens = true
+};
+
+await foreach (var token in model.GenerateChatAsync(messages, options))
+{
+    Console.Write(token); // Reasoning content is filtered out
+}
+
+// Option 2: Extract reasoning separately
+var result = await model.GenerateChatWithReasoningAsync(messages);
+Console.WriteLine($"Answer: {result.Response}");
+Console.WriteLine($"Reasoning: {result.Reasoning}");
+```
+
+Supported reasoning tag formats:
+- `<think>...</think>` (DeepSeek R1)
+- `<｜begin▁of▁thinking｜>...<｜end▁of▁thinking｜>` (DeepSeek native format)
 
 ### Supported Chat Formats
 

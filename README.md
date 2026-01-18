@@ -60,9 +60,9 @@ float[] embedding = await model.EmbedAsync("Hello, world!");
 
 | Package | Description | Status |
 |---------|-------------|--------|
-| [LMSupply.Embedder](docs/embedder.md) | Text → Vector embeddings | [![NuGet](https://img.shields.io/nuget/v/LMSupply.Embedder.svg)](https://www.nuget.org/packages/LMSupply.Embedder) |
+| [LMSupply.Embedder](docs/embedder.md) | Text → Vector embeddings (ONNX + GGUF) | [![NuGet](https://img.shields.io/nuget/v/LMSupply.Embedder.svg)](https://www.nuget.org/packages/LMSupply.Embedder) |
 | [LMSupply.Reranker](docs/reranker.md) | Semantic reranking for search | [![NuGet](https://img.shields.io/nuget/v/LMSupply.Reranker.svg)](https://www.nuget.org/packages/LMSupply.Reranker) |
-| [LMSupply.Generator](docs/generator.md) | Text generation & chat | [![NuGet](https://img.shields.io/nuget/v/LMSupply.Generator.svg)](https://www.nuget.org/packages/LMSupply.Generator) |
+| [LMSupply.Generator](docs/generator.md) | Text generation & chat (ONNX + GGUF) | [![NuGet](https://img.shields.io/nuget/v/LMSupply.Generator.svg)](https://www.nuget.org/packages/LMSupply.Generator) |
 | [LMSupply.Captioner](docs/captioner.md) | Image → Text captioning | [![NuGet](https://img.shields.io/nuget/v/LMSupply.Captioner.svg)](https://www.nuget.org/packages/LMSupply.Captioner) |
 | [LMSupply.Ocr](docs/ocr.md) | Document OCR | [![NuGet](https://img.shields.io/nuget/v/LMSupply.Ocr.svg)](https://www.nuget.org/packages/LMSupply.Ocr) |
 | [LMSupply.Detector](docs/detector.md) | Object detection | [![NuGet](https://img.shields.io/nuget/v/LMSupply.Detector.svg)](https://www.nuget.org/packages/LMSupply.Detector) |
@@ -70,6 +70,7 @@ float[] embedding = await model.EmbedAsync("Hello, world!");
 | [LMSupply.Translator](docs/translator.md) | Neural machine translation | [![NuGet](https://img.shields.io/nuget/v/LMSupply.Translator.svg)](https://www.nuget.org/packages/LMSupply.Translator) |
 | [LMSupply.Transcriber](docs/transcriber.md) | Speech → Text (Whisper) | [![NuGet](https://img.shields.io/nuget/v/LMSupply.Transcriber.svg)](https://www.nuget.org/packages/LMSupply.Transcriber) |
 | [LMSupply.Synthesizer](docs/synthesizer.md) | Text → Speech (Piper) | [![NuGet](https://img.shields.io/nuget/v/LMSupply.Synthesizer.svg)](https://www.nuget.org/packages/LMSupply.Synthesizer) |
+| [LMSupply.Llama](docs/llama.md) | Shared llama.cpp runtime for GGUF | [![NuGet](https://img.shields.io/nuget/v/LMSupply.Llama.svg)](https://www.nuget.org/packages/LMSupply.Llama) |
 
 ---
 
@@ -80,13 +81,14 @@ float[] embedding = await model.EmbedAsync("Hello, world!");
 ```csharp
 using LMSupply.Embedder;
 
+// ONNX models (default)
 await using var model = await LocalEmbedder.LoadAsync("default");
 
 // Single text
 float[] embedding = await model.EmbedAsync("Hello, world!");
 
 // Batch processing
-float[][] embeddings = await model.EmbedBatchAsync(new[]
+float[][] embeddings = await model.EmbedAsync(new[]
 {
     "First document",
     "Second document",
@@ -94,7 +96,11 @@ float[][] embeddings = await model.EmbedBatchAsync(new[]
 });
 
 // Similarity
-float similarity = model.CosineSimilarity(embeddings[0], embeddings[1]);
+float similarity = LocalEmbedder.CosineSimilarity(embeddings[0], embeddings[1]);
+
+// GGUF models (via LLamaSharp) - Auto-detected by repo name pattern
+await using var ggufModel = await LocalEmbedder.LoadAsync("nomic-ai/nomic-embed-text-v1.5-GGUF");
+float[] ggufEmbedding = await ggufModel.EmbedAsync("Hello from GGUF!");
 ```
 
 ### Semantic Reranking
@@ -215,7 +221,7 @@ Console.WriteLine($"Real-time factor: {result.RealTimeFactor:F1}x");
 
 *Updated: 2025-12 based on MTEB leaderboard and community benchmarks*
 
-### Embedder
+### Embedder (ONNX)
 
 | Alias | Model | Dims | Params | Context | Best For |
 |-------|-------|------|--------|---------|----------|
@@ -224,6 +230,17 @@ Console.WriteLine($"Real-time factor: {result.RealTimeFactor:F1}x");
 | `quality` | bge-base-en-v1.5 | 768 | 110M | 512 | Higher accuracy |
 | `large` | nomic-embed-text-v1.5 | 768 | 137M | 8192 | Long context RAG |
 | `multilingual` | multilingual-e5-base | 768 | 278M | 512 | 100+ languages |
+
+### Embedder (GGUF via LLamaSharp)
+
+GGUF models are auto-detected by `-GGUF` or `_gguf` in repo name, or `.gguf` file extension.
+
+| Model Repository | Dims | Context | Best For |
+|------------------|------|---------|----------|
+| `nomic-ai/nomic-embed-text-v1.5-GGUF` | 768 | 8K | Long context, matryoshka |
+| `BAAI/bge-small-en-v1.5-GGUF` | 384 | 512 | Compact and fast |
+| `BAAI/bge-base-en-v1.5-GGUF` | 768 | 512 | Quality balance |
+| Any HuggingFace GGUF embedding repo | varies | varies | Custom models |
 
 ### Reranker
 

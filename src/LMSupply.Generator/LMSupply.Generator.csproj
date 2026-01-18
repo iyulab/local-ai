@@ -20,16 +20,13 @@
 
   <ItemGroup>
     <ProjectReference Include="..\LMSupply.Core\LMSupply.Core.csproj" />
+    <ProjectReference Include="..\LMSupply.Llama\LMSupply.Llama.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <!-- ONNX Runtime GenAI - CPU only by default, GPU packages installed separately -->
     <!-- ExcludeAssets="native" ensures native binaries are downloaded on-demand via RuntimeManager -->
     <PackageReference Include="Microsoft.ML.OnnxRuntimeGenAI" ExcludeAssets="native" />
-
-    <!-- LLamaSharp for GGUF model inference (llama.cpp .NET binding) -->
-    <!-- ExcludeAssets="native" - native binaries downloaded on-demand via LlamaRuntimeManager -->
-    <PackageReference Include="LLamaSharp" ExcludeAssets="native" />
   </ItemGroup>
 
   <ItemGroup>

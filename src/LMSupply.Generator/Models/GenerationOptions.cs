@@ -79,6 +79,22 @@ public sealed class GenerationOptions
     public int? MaxNewTokens { get; set; }
 
     /// <summary>
+    /// Gets or sets whether to filter reasoning tokens from output.
+    /// When true, content within &lt;think&gt;...&lt;/think&gt; tags is removed from streamed output.
+    /// Useful for DeepSeek R1 and other reasoning models to show only final answers.
+    /// Defaults to false (reasoning tokens are included in output).
+    /// </summary>
+    public bool FilterReasoningTokens { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether to extract reasoning tokens to a separate property.
+    /// When true, reasoning content is captured but not included in main output.
+    /// Use with GenerateChatWithReasoningAsync to access reasoning content.
+    /// Defaults to false.
+    /// </summary>
+    public bool ExtractReasoningTokens { get; set; }
+
+    /// <summary>
     /// Creates a default instance of GenerationOptions.
     /// </summary>
     public static GenerationOptions Default => new();

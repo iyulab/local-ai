@@ -3,6 +3,7 @@ using LMSupply;
 using LMSupply.Generator;
 using LMSupply.Generator.Abstractions;
 using LMSupply.Generator.Models;
+using LMSupply.Llama;
 
 Console.WriteLine("=== LMSupply GGUF Generator Sample ===\n");
 
@@ -27,6 +28,12 @@ var info = model.GetModelInfo();
 Console.WriteLine($"Model: {info.ModelId}");
 Console.WriteLine($"Context: {info.MaxContextLength}");
 Console.WriteLine($"Format: {info.ChatFormat}");
+
+// Display engine/backend information
+var runtimeManager = LlamaRuntimeManager.Instance;
+Console.WriteLine();
+Console.WriteLine("=== Engine Information ===");
+Console.WriteLine(runtimeManager.GetEnvironmentSummary());
 Console.WriteLine();
 
 // =============================================================================

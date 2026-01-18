@@ -3,7 +3,7 @@ using System.Runtime.InteropServices;
 using LLama.Native;
 using LMSupply.Runtime;
 
-namespace LMSupply.Generator.Internal.Llama;
+namespace LMSupply.Llama;
 
 /// <summary>
 /// Manages llama.cpp native binary download and configuration.
@@ -288,7 +288,7 @@ public sealed class LlamaRuntimeManager
         {
             if (level >= LLamaLogLevel.Warning)
             {
-                System.Diagnostics.Debug.WriteLine($"[LLamaSharp:{level}] {message}");
+                Debug.WriteLine($"[LLamaSharp:{level}] {message}");
             }
         });
     }
@@ -333,13 +333,44 @@ public sealed class LlamaRuntimeManager
     /// </summary>
     public string GetEnvironmentSummary()
     {
-        if (!_initialized)
-            return "LlamaRuntimeManager not initialized";
+        var platform = EnvironmentDetector.DetectPlatform();
+        var gpu = EnvironmentDetector.DetectGpu();
 
-        return $"""
-            Llama Backend: {_activeBackend}
-            Binary Path: {_binaryPath}
-            Initialized: {_initialized}
-            """;
+        var sb = new System.Text.StringBuilder();
+
+        // Platform info
+        sb.AppendLine($"Platform: {platform.OS} {platform.Architecture}");
+        sb.AppendLine($"Runtime ID: {platform.RuntimeIdentifier}");
+
+        // GPU info
+        if (gpu.Vendor != GpuVendor.Unknown)
+        {
+            sb.AppendLine($"GPU: {gpu.DeviceName ?? gpu.Vendor.ToString()}");
+            if (gpu.TotalMemoryMB.HasValue)
+                sb.AppendLine($"VRAM: {gpu.TotalMemoryMB.Value / 1024.0:F1} GB");
+            sb.AppendLine($"GPU Vendor: {gpu.Vendor}");
+            if (gpu.CudaDriverVersionMajor.HasValue)
+                sb.AppendLine($"CUDA Driver: {gpu.CudaDriverVersionMajor}.{gpu.CudaDriverVersionMinor}");
+        }
+        else
+        {
+            sb.AppendLine("GPU: Not detected (CPU only)");
+        }
+
+        // Current backend
+        if (_initialized)
+        {
+            sb.AppendLine($"Active Backend: {_activeBackend}");
+        }
+        else
+        {
+            sb.AppendLine("Active Backend: Not initialized");
+        }
+
+        // Recommended fallback chain
+        var fallbackChain = GetBackendFallbackChain(platform, gpu);
+        sb.AppendLine($"Recommended Backends: {string.Join(" → ", fallbackChain)}");
+
+        return sb.ToString().TrimEnd();
     }
 }

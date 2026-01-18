@@ -5,6 +5,7 @@ using LLama.Sampling;
 using LMSupply.Download;
 using LMSupply.Generator.Abstractions;
 using LMSupply.Generator.Models;
+using LMSupply.Llama;
 using LMSupply.Runtime;
 
 namespace LMSupply.Generator.Internal.Llama;
@@ -176,6 +177,12 @@ internal sealed class GgufGeneratorModel : IGeneratorModel
             // Track accumulated text for stop sequence detection
             var accumulatedText = new StringBuilder();
 
+            // Initialize reasoning token filter if filtering is enabled
+            var useReasoningFilter = options.FilterReasoningTokens || options.ExtractReasoningTokens;
+            var reasoningFilter = useReasoningFilter
+                ? new ReasoningTokenFilter(options.ExtractReasoningTokens)
+                : null;
+
             await foreach (var token in executor.InferAsync(prompt, inferenceParams, cancellationToken))
             {
                 accumulatedText.Append(token);
@@ -183,10 +190,41 @@ internal sealed class GgufGeneratorModel : IGeneratorModel
                 // Check stop sequences
                 if (ShouldStop(accumulatedText.ToString(), options.StopSequences))
                 {
+                    // Flush any remaining content from reasoning filter
+                    if (reasoningFilter != null)
+                    {
+                        var remaining = reasoningFilter.Flush();
+                        if (!string.IsNullOrEmpty(remaining))
+                        {
+                            yield return remaining;
+                        }
+                    }
                     yield break;
                 }
 
-                yield return token;
+                // Apply reasoning token filter if enabled
+                if (reasoningFilter != null)
+                {
+                    var filtered = reasoningFilter.Process(token);
+                    if (!string.IsNullOrEmpty(filtered))
+                    {
+                        yield return filtered;
+                    }
+                }
+                else
+                {
+                    yield return token;
+                }
+            }
+
+            // Flush remaining content when generation completes normally
+            if (reasoningFilter != null)
+            {
+                var remaining = reasoningFilter.Flush();
+                if (!string.IsNullOrEmpty(remaining))
+                {
+                    yield return remaining;
+                }
             }
         }
         finally
@@ -289,7 +327,9 @@ internal sealed class GgufGeneratorModel : IGeneratorModel
             DoSample = options.DoSample,
             NumBeams = options.NumBeams,
             PastPresentShareBuffer = options.PastPresentShareBuffer,
-            MaxNewTokens = options.MaxNewTokens
+            MaxNewTokens = options.MaxNewTokens,
+            FilterReasoningTokens = options.FilterReasoningTokens,
+            ExtractReasoningTokens = options.ExtractReasoningTokens
         };
     }
 

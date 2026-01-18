@@ -1,4 +1,4 @@
-namespace LMSupply.Generator.Internal.Llama;
+namespace LMSupply.Llama;
 
 /// <summary>
 /// Specifies the llama.cpp backend type for native binary selection.

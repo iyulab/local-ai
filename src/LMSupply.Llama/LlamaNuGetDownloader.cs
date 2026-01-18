@@ -3,7 +3,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using LMSupply.Runtime;
 
-namespace LMSupply.Generator.Internal.Llama;
+namespace LMSupply.Llama;
 
 /// <summary>
 /// Downloads LLamaSharp backend packages from NuGet.org and extracts native binaries.
@@ -213,23 +213,22 @@ public sealed class LlamaNuGetDownloader : IDisposable
 
         if (platform.IsWindows)
         {
-            return new[] { $"win-{arch}", "win" };
+            return [$"win-{arch}", "win"];
         }
         if (platform.IsLinux)
         {
-            return new[] { $"linux-{arch}", "linux" };
+            return [$"linux-{arch}", "linux"];
         }
         if (platform.IsMacOS)
         {
-            return new[] { $"osx-{arch}", "osx" };
+            return [$"osx-{arch}", "osx"];
         }
 
-        return new[] { $"any" };
+        return ["any"];
     }
 
     private string GetCachePath(string packageId, string version, PlatformInfo platform)
     {
-        var arch = platform.Architecture == Architecture.Arm64 ? "arm64" : "x64";
         return Path.Combine(
             _cacheDirectory,
             "llamasharp",
@@ -322,7 +321,7 @@ public sealed class LlamaNuGetDownloader : IDisposable
 
             // Try to get informational version (includes NuGet version)
             var infoVersionAttr = assembly.GetCustomAttribute<
-                System.Reflection.AssemblyInformationalVersionAttribute>();
+                AssemblyInformationalVersionAttribute>();
             if (infoVersionAttr != null)
             {
                 // Extract version number (strip +commit hash if present)
