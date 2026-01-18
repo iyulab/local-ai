@@ -1054,22 +1054,23 @@ var options = new GeneratorOptions
 | 2.5 | 다운로드 진행률 & 이력서 지원 | ✅ Done | Range header, `.part` 파일 |
 | 2.6 | Unit tests | ✅ Done | `GgufModelRegistryTests.cs` (23 tests) |
 
-### Phase 3: Inference Engine (5 tasks)
-| # | Task | Priority | Complexity |
-|---|------|----------|------------|
-| 3.1 | `GgufGeneratorModel` 구현 | High | High |
-| 3.2 | 스트리밍 생성 | High | Medium |
-| 3.3 | Chat 생성 | High | Medium |
-| 3.4 | GPU 레이어 계산 | Medium | Medium |
-| 3.5 | 리소스 정리 | High | Low |
+### Phase 3: Inference Engine ✅ COMPLETED
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 3.1 | `GgufGeneratorModel` 구현 | ✅ Done | LLamaSharp StatelessExecutor 사용 |
+| 3.2 | 스트리밍 생성 | ✅ Done | IAsyncEnumerable<string> 지원 |
+| 3.3 | Chat 생성 | ✅ Done | GenerateChatAsync, ChatFormatter 통합 |
+| 3.4 | GPU 레이어 계산 | ✅ Done | CalculateGpuLayers helper |
+| 3.5 | 리소스 정리 | ✅ Done | IAsyncDisposable 구현 |
+| 3.6 | GeneratorModelLoader GGUF 라우팅 | ✅ Done | LoadGgufAsync, LoadGgufFromPathAsync |
 
-### Phase 4: Chat Formatters (4 tasks)
-| # | Task | Priority | Complexity |
-|---|------|----------|------------|
-| 4.1 | `GgufChatFormatDetector` | High | Low |
-| 4.2 | EXAONE/DeepSeek 포맷터 | Medium | Low |
-| 4.3 | `ChatFormatterFactory` 확장 | High | Low |
-| 4.4 | 메타데이터 chat_template 읽기 | Low | Medium |
+### Phase 4: Chat Formatters ✅ COMPLETED
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 4.1 | `GgufChatFormatDetector` | ✅ Done | 파일명 기반 자동 감지 |
+| 4.2 | EXAONE/DeepSeek 포맷터 | ✅ Done | + Gemma, Mistral 추가 |
+| 4.3 | `ChatFormatterFactory` 확장 | ✅ Done | CreateByFormat에 8개 포맷 추가 |
+| 4.4 | 메타데이터 chat_template 읽기 | ⏳ Deferred | 향후 GGUF 메타데이터 파싱 시 |
 
 ### Phase 5: Testing & Docs (5 tasks)
 | # | Task | Priority | Complexity |
@@ -1126,13 +1127,18 @@ var options = new GeneratorOptions
 - [x] GgufModelDownloader (자동 양자화 선택, 이력서 다운로드 지원)
 - [x] GgufModelRegistryTests (23개 테스트 통과)
 
-### Phase 3
-- [ ] 텍스트 생성 스트리밍 동작
-- [ ] Chat 대화 동작
-- [ ] 리소스 정상 해제
+### Phase 3 ✅ COMPLETED
+- [x] 텍스트 생성 스트리밍 동작
+- [x] Chat 대화 동작
+- [x] 리소스 정상 해제
+- [x] GgufGeneratorModel 구현 완료
+- [x] GeneratorModelLoader GGUF 라우팅 구현
 
-### Phase 4
-- [ ] 주요 모델 (Llama, Qwen, Gemma) chat 포맷 지원
+### Phase 4 ✅ COMPLETED
+- [x] 주요 모델 (Llama, Qwen, Gemma, EXAONE, DeepSeek, Mistral) chat 포맷 지원
+- [x] GgufChatFormatDetector 구현
+- [x] 4개 새 ChatFormatter 추가 (Gemma, EXAONE, DeepSeek, Mistral)
+- [x] ChatFormatterFactory 확장
 
 ### Phase 5
 - [ ] 테스트 커버리지 80%+
