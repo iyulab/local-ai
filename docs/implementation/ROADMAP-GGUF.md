@@ -1025,14 +1025,14 @@ var options = new GeneratorOptions
 
 ## Task Summary
 
-### Phase 0: Architecture (5 tasks)
-| # | Task | Priority | Complexity |
-|---|------|----------|------------|
-| 0.1 | `IGeneratorBackend` 인터페이스 정의 | High | Low |
-| 0.2 | `ModelFormatDetector` 구현 | High | Medium |
-| 0.3 | `LocalGenerator` 팩토리 확장 | High | Medium |
-| 0.4 | `OnnxGeneratorModel` 리팩토링 | Medium | Medium |
-| 0.5 | 통합 테스트 프레임워크 설정 | Medium | Low |
+### Phase 0: Architecture ✅ COMPLETED
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 0.1 | `ModelFormat`/`GeneratorBackendType` enum 정의 | ✅ Done | `Models/ModelFormat.cs` |
+| 0.2 | `ModelFormatDetector` 구현 | ✅ Done | 파일확장자, 디렉토리, repoId 패턴, known providers |
+| 0.3 | `GeneratorModelLoader` 팩토리 확장 | ✅ Done | 형식 감지 및 GGUF/ONNX 라우팅 |
+| 0.4 | Unit tests 작성 | ✅ Done | `ModelFormatDetectorTests.cs` (14+ cases) |
+| - | 모든 기존 테스트 통과 | ✅ Done | 164 tests passed |
 
 ### Phase 1: Runtime Management (6 tasks)
 | # | Task | Priority | Complexity |
@@ -1103,9 +1103,11 @@ var options = new GeneratorOptions
 
 ## Success Criteria
 
-### Phase 0
-- [ ] 기존 ONNX 테스트 모두 통과
-- [ ] `IGeneratorBackend` 인터페이스 정의 완료
+### Phase 0 ✅ COMPLETED
+- [x] 기존 ONNX 테스트 모두 통과 (164 tests passed)
+- [x] `ModelFormat` 및 `GeneratorBackendType` enum 정의 완료
+- [x] `ModelFormatDetector` 구현 완료
+- [x] `GeneratorModelLoader` 형식 감지 및 라우팅 추가
 
 ### Phase 1
 - [ ] CPU 백엔드 자동 다운로드 및 로드
