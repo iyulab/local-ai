@@ -13,15 +13,23 @@ public sealed class OnnxNuGetDownloader : IDisposable
 {
     private const string NuGetFlatContainerBase = "https://api.nuget.org/v3-flatcontainer";
 
-    // Package names for each provider
+    // Package names for each provider (platform-independent)
     private static readonly Dictionary<string, string> ProviderPackages = new()
     {
         ["cpu"] = "microsoft.ml.onnxruntime",
         ["directml"] = "microsoft.ml.onnxruntime.directml",
-        ["cuda"] = "microsoft.ml.onnxruntime.gpu",
-        ["cuda11"] = "microsoft.ml.onnxruntime.gpu",
-        ["cuda12"] = "microsoft.ml.onnxruntime.gpu",
     };
+
+    /// <summary>
+    /// Gets the correct NuGet package ID for CUDA based on platform.
+    /// Windows uses microsoft.ml.onnxruntime.gpu.windows, Linux uses microsoft.ml.onnxruntime.gpu
+    /// </summary>
+    private static string GetCudaPackageId(PlatformInfo platform)
+    {
+        return platform.IsWindows
+            ? "microsoft.ml.onnxruntime.gpu.windows"
+            : "microsoft.ml.onnxruntime.gpu";
+    }
 
     private readonly HttpClient _httpClient;
     private readonly string _cacheDirectory;
@@ -53,7 +61,12 @@ public sealed class OnnxNuGetDownloader : IDisposable
 
         // Determine package name
         var providerKey = provider.ToLowerInvariant();
-        if (!ProviderPackages.TryGetValue(providerKey, out var packageId))
+        string packageId;
+        if (providerKey is "cuda" or "cuda11" or "cuda12")
+        {
+            packageId = GetCudaPackageId(platform);
+        }
+        else if (!ProviderPackages.TryGetValue(providerKey, out packageId!))
         {
             packageId = ProviderPackages["cpu"]; // Fallback to CPU
         }
