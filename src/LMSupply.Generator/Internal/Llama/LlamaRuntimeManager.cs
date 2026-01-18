@@ -127,9 +127,11 @@ public sealed class LlamaRuntimeManager
             chain.Add(LlamaBackend.Metal);
         }
 
-        // NVIDIA GPU: CUDA
+        // NVIDIA GPU: CUDA (try newest first, fallback to older)
         if (gpu.Vendor == GpuVendor.Nvidia)
         {
+            if (gpu.CudaDriverVersionMajor >= 13)
+                chain.Add(LlamaBackend.Cuda13);
             if (gpu.CudaDriverVersionMajor >= 12)
                 chain.Add(LlamaBackend.Cuda12);
         }
