@@ -171,14 +171,18 @@ public static class GgufModelRegistry
 
     /// <summary>
     /// Checks if a string is a known GGUF alias.
+    /// Only matches "gguf:"-prefixed aliases (e.g., "gguf:default", "gguf:fast").
+    /// Plain aliases like "default" or "fast" are reserved for ONNX models.
     /// </summary>
     public static bool IsAlias(string value)
     {
         if (string.IsNullOrWhiteSpace(value))
             return false;
 
-        return _models.ContainsKey(value) ||
-               _models.ContainsKey($"gguf:{value}");
+        // Only match if it starts with "gguf:" prefix
+        // Plain aliases without prefix are reserved for ONNX ModelRegistry
+        return value.StartsWith("gguf:", StringComparison.OrdinalIgnoreCase) &&
+               _models.ContainsKey(value);
     }
 
     /// <summary>

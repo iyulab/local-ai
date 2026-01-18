@@ -126,25 +126,30 @@ foreach (var result in results)
 ```csharp
 using LMSupply.Generator;
 
-// Simple generation
+// ONNX models (via GenAI)
 var generator = await TextGeneratorBuilder.Create()
-    .WithDefaultModel()  // Phi-3.5 Mini
+    .WithDefaultModel()  // Phi-4-mini-instruct
     .BuildAsync();
 
 string response = await generator.GenerateCompleteAsync("What is machine learning?");
 Console.WriteLine(response);
 
-// Chat format
+// GGUF models (via LLamaSharp) - Access to thousands of quantized models
+await using var model = await LocalGenerator.LoadAsync("gguf:default");  // Llama 3.2 3B
+
+await foreach (var token in model.GenerateAsync("Hello, my name is"))
+{
+    Console.Write(token);
+}
+
+// Chat format with GGUF
 var messages = new[]
 {
-    new ChatMessage(ChatRole.System, "You are a helpful assistant."),
-    new ChatMessage(ChatRole.User, "Explain quantum computing simply.")
+    ChatMessage.System("You are a helpful assistant."),
+    ChatMessage.User("Explain quantum computing simply.")
 };
 
-string chatResponse = await generator.GenerateChatCompleteAsync(messages);
-
-// Streaming
-await foreach (var token in generator.GenerateAsync("Write a story:"))
+await foreach (var token in model.GenerateChatAsync(messages))
 {
     Console.Write(token);
 }
@@ -230,7 +235,7 @@ Console.WriteLine($"Real-time factor: {result.RealTimeFactor:F1}x");
 | `large` | bge-reranker-large | 560M | 512 | Best accuracy |
 | `multilingual` | bge-reranker-v2-m3 | 568M | 8192 | Long docs, 100+ languages |
 
-### Generator
+### Generator (ONNX)
 
 | Alias | Model | Params | Context | License | Best For |
 |-------|-------|--------|---------|---------|----------|
@@ -239,6 +244,18 @@ Console.WriteLine($"Real-time factor: {result.RealTimeFactor:F1}x");
 | `quality` | phi-4 | 14B | 16K | MIT | Best reasoning |
 | `medium` | Phi-3.5-mini-instruct | 3.8B | 128K | MIT | Long context |
 | `multilingual` | gemma-2-2b-it | 2B | 8K | Gemma ToU | Multi-language |
+
+### Generator (GGUF via LLamaSharp)
+
+| Alias | Model | Params | Context | Best For |
+|-------|-------|--------|---------|----------|
+| `gguf:default` | Llama 3.2 3B Instruct | 3B | 8K | Balanced quality/speed |
+| `gguf:fast` | Llama 3.2 1B Instruct | 1B | 8K | Quick responses |
+| `gguf:quality` | Qwen 2.5 7B Instruct | 7B | 32K | Higher quality |
+| `gguf:large` | Qwen 2.5 14B Instruct | 14B | 32K | Best quality |
+| `gguf:korean` | EXAONE 3.5 7.8B | 7.8B | 32K | Korean language |
+| `gguf:code` | Qwen 2.5 Coder 7B | 7B | 32K | Coding tasks |
+| `gguf:reasoning` | DeepSeek R1 Distill 8B | 8B | 32K | Complex reasoning |
 
 ### Translator
 

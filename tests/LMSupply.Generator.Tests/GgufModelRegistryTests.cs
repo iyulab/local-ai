@@ -76,7 +76,10 @@ public class GgufModelRegistryTests
 
     [Theory]
     [InlineData("gguf:default", true)]
-    [InlineData("default", true)]
+    [InlineData("gguf:fast", true)]
+    [InlineData("gguf:quality", true)]
+    [InlineData("default", false)] // Plain aliases are reserved for ONNX
+    [InlineData("fast", false)]    // Plain aliases are reserved for ONNX
     [InlineData("unknown", false)]
     public void IsAlias_ReturnsCorrectResult(string value, bool expected)
     {

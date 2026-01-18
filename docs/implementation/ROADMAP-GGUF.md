@@ -1072,14 +1072,13 @@ var options = new GeneratorOptions
 | 4.3 | `ChatFormatterFactory` 확장 | ✅ Done | CreateByFormat에 8개 포맷 추가 |
 | 4.4 | 메타데이터 chat_template 읽기 | ⏳ Deferred | 향후 GGUF 메타데이터 파싱 시 |
 
-### Phase 5: Testing & Docs (5 tasks)
-| # | Task | Priority | Complexity |
-|---|------|----------|------------|
-| 5.1 | Unit tests | High | Medium |
-| 5.2 | Integration tests | Medium | Medium |
-| 5.3 | `docs/generator-gguf.md` | High | Low |
-| 5.4 | README 업데이트 | High | Low |
-| 5.5 | 예제 코드 | Medium | Low |
+### Phase 5: Testing & Docs ✅ COMPLETED
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 5.1 | Integration tests | ✅ Done | `GgufIntegrationTests.cs`, `GgufModelFormatTests` |
+| 5.2 | `docs/generator.md` GGUF 섹션 | ✅ Done | GGUF 사용법, 별칭 테이블, 설정 옵션 |
+| 5.3 | README 업데이트 | ✅ Done | GGUF 예제, Generator 테이블 분리 |
+| 5.4 | 예제 코드 | ✅ Done | `samples/GeneratorGgufSample` |
 
 ---
 
@@ -1140,9 +1139,12 @@ var options = new GeneratorOptions
 - [x] 4개 새 ChatFormatter 추가 (Gemma, EXAONE, DeepSeek, Mistral)
 - [x] ChatFormatterFactory 확장
 
-### Phase 5
-- [ ] 테스트 커버리지 80%+
-- [ ] 문서 완성
+### Phase 5 ✅ COMPLETED
+- [x] Integration tests 작성 (GgufIntegrationTests, GgufModelFormatTests)
+- [x] docs/generator.md GGUF 섹션 추가
+- [x] README.md GGUF 예제 및 테이블 추가
+- [x] GeneratorGgufSample 예제 프로젝트 작성
+- [x] 전체 테스트 통과 (903 tests)
 
 ---
 

@@ -1,3 +1,4 @@
+using LMSupply.Generator.Internal.Llama;
 using LMSupply.Generator.Models;
 
 namespace LMSupply.Generator.Internal;
@@ -19,6 +20,12 @@ internal static class ModelFormatDetector
     public static ModelFormat Detect(string modelIdOrPath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(modelIdOrPath);
+
+        // 0. Check if it's a GGUF registry alias (e.g., "gguf:default", "gguf:fast")
+        if (GgufModelRegistry.IsAlias(modelIdOrPath))
+        {
+            return ModelFormat.Gguf;
+        }
 
         // 1. Check file extension for direct file paths
         if (HasExtension(modelIdOrPath, GgufExtensions))
