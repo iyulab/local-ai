@@ -44,7 +44,7 @@ public static class ChatFormatterFactory
     /// <summary>
     /// Creates a chat formatter by format name.
     /// </summary>
-    /// <param name="formatName">The format name (phi3, llama3, chatml).</param>
+    /// <param name="formatName">The format name (phi3, llama3, chatml, gemma, exaone, deepseek, mistral).</param>
     /// <returns>The corresponding chat formatter.</returns>
     public static IChatFormatter CreateByFormat(string formatName)
     {
@@ -53,8 +53,14 @@ public static class ChatFormatterFactory
         return formatName.ToLowerInvariant() switch
         {
             "phi3" or "phi-3" or "phi" => new Phi3ChatFormatter(),
-            "llama3" or "llama-3" or "llama" => new Llama3ChatFormatter(),
-            "chatml" or "qwen" => new ChatMLFormatter(),
+            "llama3" or "llama-3" or "llama" or "llama2" => new Llama3ChatFormatter(),
+            "chatml" or "qwen" or "yi" or "internlm" or "openchat" => new ChatMLFormatter(),
+            "gemma" => new GemmaChatFormatter(),
+            "exaone" => new ExaoneChatFormatter(),
+            "deepseek" => new DeepSeekChatFormatter(),
+            "mistral" or "mixtral" => new MistralChatFormatter(),
+            "vicuna" => new ChatMLFormatter(), // Vicuna can use ChatML
+            "zephyr" => new ChatMLFormatter(), // Zephyr uses ChatML variant
             _ => throw new ArgumentException($"Unknown chat format: {formatName}", nameof(formatName))
         };
     }

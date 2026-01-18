@@ -5,13 +5,11 @@ namespace LMSupply.Runtime;
 
 /// <summary>
 /// Orchestrates runtime binary management including detection, download, caching, and loading.
-/// This is the main entry point for the lazy binary distribution system.
+/// Downloads native binaries on-demand from NuGet.org - no pre-built manifest required.
 /// </summary>
 public sealed class RuntimeManager : IAsyncDisposable
 {
-    private readonly ManifestProvider _manifestProvider;
-    private readonly BinaryDownloader _downloader;
-    private readonly RuntimeCache _cache;
+    private readonly OnnxNuGetDownloader _nugetDownloader;
     private readonly RuntimeManagerOptions _options;
     private readonly SemaphoreSlim _initLock = new(1, 1);
 
@@ -37,19 +35,7 @@ public sealed class RuntimeManager : IAsyncDisposable
     public RuntimeManager(RuntimeManagerOptions options)
     {
         _options = options;
-        _manifestProvider = new ManifestProvider();
-        _downloader = new BinaryDownloader(new BinaryDownloaderOptions
-        {
-            ProxyUrl = options.ProxyUrl,
-            ProxyUsername = options.ProxyUsername,
-            ProxyPassword = options.ProxyPassword,
-            MaxRetries = options.MaxRetries
-        });
-        _cache = new RuntimeCache(new RuntimeCacheOptions
-        {
-            CacheDirectory = options.CacheDirectory,
-            MaxCacheSize = options.MaxCacheSize
-        });
+        _nugetDownloader = new OnnxNuGetDownloader(options.CacheDirectory);
     }
 
     /// <summary>
@@ -143,11 +129,11 @@ public sealed class RuntimeManager : IAsyncDisposable
     }
 
     /// <summary>
-    /// Ensures a runtime binary is available, downloading if necessary.
+    /// Ensures a runtime binary is available, downloading from NuGet if necessary.
     /// When provider is null (Auto mode), uses the fallback chain: CUDA → DirectML → CoreML → CPU.
     /// </summary>
     /// <param name="package">The package name (e.g., "onnxruntime").</param>
-    /// <param name="version">Optional version. If null, uses latest available.</param>
+    /// <param name="version">Optional version. If null, auto-detects from assembly.</param>
     /// <param name="provider">Optional provider. If null, uses fallback chain for best available.</param>
     /// <param name="progress">Optional progress reporter.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
@@ -161,27 +147,10 @@ public sealed class RuntimeManager : IAsyncDisposable
     {
         await InitializeAsync(cancellationToken);
 
-        var rid = _platform!.RuntimeIdentifier;
-        var manifest = await _manifestProvider.GetManifestAsync(cancellationToken: cancellationToken);
-
-        // Resolve version if not specified
-        var actualVersion = version;
-        if (string.IsNullOrEmpty(actualVersion))
-        {
-            var pkg = manifest.GetPackage(package);
-            actualVersion = pkg?.Versions.Keys
-                .OrderByDescending(v => Version.TryParse(v, out var ver) ? ver : new Version(0, 0))
-                .FirstOrDefault();
-
-            if (actualVersion is null)
-                throw new InvalidOperationException($"No versions available for package: {package}");
-        }
-
-        // If provider is explicitly specified, use single-provider logic with CPU fallback
+        // If provider is explicitly specified, download for that provider
         if (!string.IsNullOrEmpty(provider))
         {
-            return await EnsureRuntimeForProviderAsync(
-                package, actualVersion, rid, provider, progress, cancellationToken);
+            return await DownloadRuntimeForProviderAsync(provider, version, progress, cancellationToken);
         }
 
         // Auto mode: try providers in fallback chain order
@@ -192,8 +161,7 @@ public sealed class RuntimeManager : IAsyncDisposable
         {
             try
             {
-                return await EnsureRuntimeForProviderAsync(
-                    package, actualVersion, rid, providerToTry, progress, cancellationToken);
+                return await DownloadRuntimeForProviderAsync(providerToTry, version, progress, cancellationToken);
             }
             catch (OperationCanceledException)
             {
@@ -202,51 +170,36 @@ public sealed class RuntimeManager : IAsyncDisposable
             catch (Exception ex) when (providerToTry != "cpu")
             {
                 // Log and continue to next provider in chain
-                System.Diagnostics.Debug.WriteLine(
-                    $"[RuntimeManager] Provider '{providerToTry}' failed for {package}: {ex.Message}. Trying next provider...");
+                Debug.WriteLine(
+                    $"[RuntimeManager] Provider '{providerToTry}' failed: {ex.Message}. Trying next provider...");
                 lastException = ex;
             }
         }
 
-        // Should not reach here since CPU is always in chain, but just in case
-        throw lastException ?? new InvalidOperationException($"No provider available for {package}");
+        // Should not reach here since CPU is always in chain
+        throw lastException ?? new InvalidOperationException("No provider available for ONNX Runtime");
     }
 
     /// <summary>
-    /// Ensures runtime for a specific provider with CPU fallback.
+    /// Downloads runtime for a specific provider from NuGet.
     /// </summary>
-    private async Task<string> EnsureRuntimeForProviderAsync(
-        string package,
-        string version,
-        string rid,
+    private async Task<string> DownloadRuntimeForProviderAsync(
         string provider,
+        string? version,
         IProgress<DownloadProgress>? progress,
         CancellationToken cancellationToken)
     {
-        // Check cache first
-        var cachedPath = await _cache.GetCachedPathAsync(package, version, rid, provider, cancellationToken);
-        if (cachedPath is not null)
-        {
-            NativeLoader.Instance.RegisterDirectory(Path.GetDirectoryName(cachedPath)!, preload: true, primaryLibrary: package);
-            return Path.GetDirectoryName(cachedPath)!;
-        }
+        var binaryPath = await _nugetDownloader.DownloadAsync(
+            provider,
+            _platform!,
+            version,
+            progress,
+            cancellationToken);
 
-        // Get binary entry from manifest
-        var entry = await _manifestProvider.GetBinaryAsync(package, version, rid, provider, cancellationToken);
-        if (entry is null)
-        {
-            throw new InvalidOperationException(
-                $"No binary available for {package} {version} on {rid} with provider {provider}");
-        }
+        // Register with NativeLoader for DLL resolution
+        NativeLoader.Instance.RegisterDirectory(binaryPath, preload: true, primaryLibrary: "onnxruntime");
 
-        // Download and cache
-        var targetDirectory = _cache.GetCacheDirectory(package, version, rid, provider);
-        var binaryPath = await _downloader.DownloadAsync(entry, targetDirectory, progress, cancellationToken);
-
-        await _cache.RegisterAsync(entry, package, version, binaryPath, cancellationToken);
-        NativeLoader.Instance.RegisterDirectory(targetDirectory, preload: true, primaryLibrary: package);
-
-        return targetDirectory;
+        return binaryPath;
     }
 
     /// <summary>
@@ -303,9 +256,9 @@ public sealed class RuntimeManager : IAsyncDisposable
     }
 
     /// <summary>
-    /// Gets the runtime cache.
+    /// Gets the cache directory path.
     /// </summary>
-    public RuntimeCache Cache => _cache;
+    public string CacheDirectory => _options.CacheDirectory ?? GetDefaultCacheDirectory();
 
     /// <summary>
     /// Gets environment information summary.
@@ -320,16 +273,19 @@ public sealed class RuntimeManager : IAsyncDisposable
             GPU: {_gpu}
             Recommended Provider: {RecommendedProvider}
             Default Provider String: {GetDefaultProvider()}
-            Cache Directory: {_cache.GetCacheDirectory("", "", "", "")}
-            Cache Size: {_cache.GetTotalCacheSize() / (1024.0 * 1024.0):F2} MB
+            Cache Directory: {CacheDirectory}
             """;
+    }
+
+    private static string GetDefaultCacheDirectory()
+    {
+        var baseDir = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        return Path.Combine(baseDir, "LMSupply", "cache", "runtimes");
     }
 
     public async ValueTask DisposeAsync()
     {
-        _manifestProvider.Dispose();
-        _downloader.Dispose();
-        _cache.Dispose();
+        _nugetDownloader.Dispose();
         _initLock.Dispose();
     }
 }

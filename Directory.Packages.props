@@ -23,6 +23,12 @@
     <PackageVersion Include="Microsoft.ML.OnnxRuntimeGenAI.Cuda" Version="0.11.3" />
     <PackageVersion Include="Microsoft.ML.OnnxRuntimeGenAI.DirectML" Version="0.11.3" />
 
+    <!-- LLamaSharp for GGUF model inference (managed wrapper only, native binaries via RuntimeManager) -->
+    <PackageVersion Include="LLamaSharp" Version="0.25.0" />
+    <!-- LLamaSharp Backend packages (for samples and development) -->
+    <PackageVersion Include="LLamaSharp.Backend.Cpu" Version="0.25.0" />
+    <PackageVersion Include="LLamaSharp.Backend.Cuda12" Version="0.25.0" />
+
     <!-- GPU Providers (optional, user installs separately) -->
     <PackageVersion Include="Microsoft.ML.OnnxRuntime.Gpu" Version="1.23.2" />
     <PackageVersion Include="Microsoft.ML.OnnxRuntime.DirectML" Version="1.23.2" />

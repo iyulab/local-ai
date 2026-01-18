@@ -1,6 +1,6 @@
 # LMSupply.Generator
 
-Local text generation and chat with ONNX Runtime GenAI.
+Local text generation and chat with ONNX Runtime GenAI and GGUF (LLamaSharp) support.
 
 ## Installation
 
@@ -264,23 +264,191 @@ var generator = await TextGeneratorBuilder.Create()
 
 ## GPU Support
 
-Install the appropriate ONNX Runtime package:
+GPU acceleration is **automatic** — LMSupply detects your hardware and downloads appropriate runtime binaries on first use:
 
-```bash
-# NVIDIA CUDA
-dotnet add package Microsoft.ML.OnnxRuntime.Gpu
+- **NVIDIA CUDA**: Automatically detected and used
+- **Windows DirectML**: AMD, Intel, NVIDIA via Direct3D
+- **macOS CoreML**: Apple Silicon optimization
 
-# Windows (AMD, Intel, NVIDIA)
-dotnet add package Microsoft.ML.OnnxRuntime.DirectML
+No additional packages required. Use `ExecutionProvider.Auto` (default) or force specific provider in options.
 
-# macOS Apple Silicon
-dotnet add package Microsoft.ML.OnnxRuntime.CoreML
+## GGUF Model Support
+
+GGUF models are loaded via [LLamaSharp](https://github.com/SciSharp/LLamaSharp), providing access to the vast ecosystem of quantized models on HuggingFace.
+
+### Quick Start with GGUF
+
+```csharp
+using LMSupply.Generator;
+
+// Load a GGUF model using the "gguf:" prefix
+await using var model = await LocalGenerator.LoadAsync("gguf:default");
+
+// Generate text
+await foreach (var token in model.GenerateAsync("Hello, my name is"))
+{
+    Console.Write(token);
+}
 ```
+
+### GGUF Model Aliases
+
+| Alias | Model | Parameters | Use Case |
+|-------|-------|------------|----------|
+| `gguf:default` | Llama 3.2 3B Instruct | 3B | Balanced quality/speed |
+| `gguf:fast` | Llama 3.2 1B Instruct | 1B | Quick responses |
+| `gguf:quality` | Qwen 2.5 7B Instruct | 7B | Higher quality |
+| `gguf:large` | Qwen 2.5 14B Instruct | 14B | Best quality |
+| `gguf:multilingual` | Gemma 2 9B | 9B | Non-English tasks |
+| `gguf:korean` | EXAONE 3.5 7.8B | 7.8B | Korean language |
+| `gguf:code` | Qwen 2.5 Coder 7B | 7B | Coding tasks |
+| `gguf:reasoning` | DeepSeek R1 Distill 8B | 8B | Complex reasoning |
+
+### Using HuggingFace GGUF Repositories
+
+```csharp
+// Load from any GGUF repository
+await using var model = await LocalGenerator.LoadAsync(
+    "bartowski/Llama-3.2-3B-Instruct-GGUF");
+
+// Specify a particular quantization
+await using var model = await LocalGenerator.LoadAsync(
+    "bartowski/Qwen2.5-7B-Instruct-GGUF",
+    new GeneratorOptions { GgufFileName = "Qwen2.5-7B-Instruct-Q4_K_M.gguf" });
+```
+
+### GGUF Configuration Options
+
+```csharp
+var options = new GeneratorOptions
+{
+    // Context length (default: from model metadata)
+    MaxContextLength = 4096,
+
+    // GPU layers (0 = CPU only, -1 = all layers on GPU)
+    GpuLayerCount = -1,
+
+    // Batch size for prompt processing
+    BatchSize = 512,
+
+    // Number of threads for CPU inference
+    ThreadCount = 8
+};
+
+await using var model = await LocalGenerator.LoadAsync("gguf:default", options);
+```
+
+### Chat Generation with GGUF
+
+```csharp
+using LMSupply.Generator;
+using LMSupply.Generator.Models;
+
+await using var model = await LocalGenerator.LoadAsync("gguf:default");
+
+var messages = new[]
+{
+    ChatMessage.System("You are a helpful assistant."),
+    ChatMessage.User("What is the capital of France?")
+};
+
+await foreach (var token in model.GenerateChatAsync(messages))
+{
+    Console.Write(token);
+}
+```
+
+### Generation Options
+
+```csharp
+var genOptions = new GenerationOptions
+{
+    MaxTokens = 256,          // Maximum tokens to generate
+    Temperature = 0.7f,        // Randomness (0.0 = deterministic)
+    TopP = 0.9f,              // Nucleus sampling
+    TopK = 40                  // Top-K sampling
+};
+
+await foreach (var token in model.GenerateAsync(prompt, genOptions))
+{
+    Console.Write(token);
+}
+```
+
+### Reasoning Model Support (DeepSeek R1)
+
+For reasoning models like DeepSeek R1 that output `<think>...</think>` tags:
+
+```csharp
+await using var model = await LocalGenerator.LoadAsync("gguf:reasoning");
+
+// Option 1: Filter reasoning tokens (only show final answer)
+var options = new GenerationOptions
+{
+    FilterReasoningTokens = true
+};
+
+await foreach (var token in model.GenerateChatAsync(messages, options))
+{
+    Console.Write(token); // Reasoning content is filtered out
+}
+
+// Option 2: Extract reasoning separately
+var result = await model.GenerateChatWithReasoningAsync(messages);
+Console.WriteLine($"Answer: {result.Response}");
+Console.WriteLine($"Reasoning: {result.Reasoning}");
+```
+
+Supported reasoning tag formats:
+- `<think>...</think>` (DeepSeek R1)
+- `<｜begin▁of▁thinking｜>...<｜end▁of▁thinking｜>` (DeepSeek native format)
+
+### Supported Chat Formats
+
+The library auto-detects chat format from model filenames:
+
+| Format | Models |
+|--------|--------|
+| Llama 3 | Llama-3, Llama-3.1, Llama-3.2, CodeLlama |
+| ChatML | Qwen, Yi, InternLM, OpenChat |
+| Gemma | Gemma, Gemma-2 |
+| Phi-3 | Phi-3, Phi-3.5, Phi-4 |
+| Mistral | Mistral, Mixtral |
+| EXAONE | EXAONE |
+| DeepSeek | DeepSeek, DeepSeek-R1 |
+| Vicuna | Vicuna |
+| Zephyr | Zephyr |
+
+### Model Information
+
+```csharp
+await using var model = await LocalGenerator.LoadAsync("gguf:default");
+
+var info = model.GetModelInfo();
+
+Console.WriteLine($"Model: {info.ModelId}");
+Console.WriteLine($"Path: {info.ModelPath}");
+Console.WriteLine($"Context: {info.MaxContextLength}");
+Console.WriteLine($"Format: {info.ChatFormat}");
+Console.WriteLine($"Provider: {info.ExecutionProvider}");  // "LLamaSharp"
+```
+
+### GGUF vs ONNX
+
+| Feature | GGUF (LLamaSharp) | ONNX (GenAI) |
+|---------|-------------------|--------------|
+| Model availability | Extensive | Limited |
+| Quantization options | Many (Q2-Q8) | FP16, INT4 |
+| Setup complexity | Simple | Simple |
+| GPU support | CUDA, Metal | CUDA, DirectML, CoreML |
+| Memory efficiency | Good | Good |
+| Inference speed | Fast | Fast |
 
 ## Requirements
 
 - .NET 10.0+
-- ONNX Runtime GenAI 0.7+
+- ONNX Runtime GenAI 0.7+ (for ONNX models)
+- LLamaSharp 0.25+ (for GGUF models)
 - Windows, Linux, or macOS
 
 ## License

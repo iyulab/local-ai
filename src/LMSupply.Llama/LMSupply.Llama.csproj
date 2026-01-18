@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>LMSupply.Llama</PackageId>
+    <Description>Shared LLamaSharp/llama.cpp runtime management for LMSupply. Provides on-demand native binary downloading, GPU detection, and fallback chain support.</Description>
+    <PackageTags>LMSupply;llama;llama.cpp;llamasharp;gguf;gpu;cuda;metal;vulkan</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="LMSupply.Generator" />
+    <InternalsVisibleTo Include="LMSupply.Embedder" />
+    <InternalsVisibleTo Include="LMSupply.Llama.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\LMSupply.Core\LMSupply.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- LLamaSharp for GGUF model inference (llama.cpp .NET binding) -->
+    <!-- ExcludeAssets="native" - native binaries downloaded on-demand via LlamaRuntimeManager -->
+    <PackageReference Include="LLamaSharp" ExcludeAssets="native" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="" />
+  </ItemGroup>
+
+  <!-- Exclude native runtimes from NuGet package - they will be lazy-loaded -->
+  <ItemGroup>
+    <None Remove="runtimes\**\*" />
+  </ItemGroup>
+
+  <Target Name="ExcludeNativeAssets" BeforeTargets="GenerateNuspec">
+    <ItemGroup>
+      <_PackageFiles Remove="@(_PackageFiles)" Condition="$([System.String]::Copy('%(Identity)').Contains('runtimes'))" />
+    </ItemGroup>
+  </Target>
+
+</Project>

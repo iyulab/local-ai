@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\LMSupply.Core\LMSupply.Core.csproj" />
+    <ProjectReference Include="..\LMSupply.Llama\LMSupply.Llama.csproj" />
     <ProjectReference Include="..\LMSupply.Text.Core\LMSupply.Text.Core.csproj" />
   </ItemGroup>
 

@@ -60,9 +60,9 @@ float[] embedding = await model.EmbedAsync("Hello, world!");
 
 | Package | Description | Status |
 |---------|-------------|--------|
-| [LMSupply.Embedder](docs/embedder.md) | Text → Vector embeddings | [![NuGet](https://img.shields.io/nuget/v/LMSupply.Embedder.svg)](https://www.nuget.org/packages/LMSupply.Embedder) |
+| [LMSupply.Embedder](docs/embedder.md) | Text → Vector embeddings (ONNX + GGUF) | [![NuGet](https://img.shields.io/nuget/v/LMSupply.Embedder.svg)](https://www.nuget.org/packages/LMSupply.Embedder) |
 | [LMSupply.Reranker](docs/reranker.md) | Semantic reranking for search | [![NuGet](https://img.shields.io/nuget/v/LMSupply.Reranker.svg)](https://www.nuget.org/packages/LMSupply.Reranker) |
-| [LMSupply.Generator](docs/generator.md) | Text generation & chat | [![NuGet](https://img.shields.io/nuget/v/LMSupply.Generator.svg)](https://www.nuget.org/packages/LMSupply.Generator) |
+| [LMSupply.Generator](docs/generator.md) | Text generation & chat (ONNX + GGUF) | [![NuGet](https://img.shields.io/nuget/v/LMSupply.Generator.svg)](https://www.nuget.org/packages/LMSupply.Generator) |
 | [LMSupply.Captioner](docs/captioner.md) | Image → Text captioning | [![NuGet](https://img.shields.io/nuget/v/LMSupply.Captioner.svg)](https://www.nuget.org/packages/LMSupply.Captioner) |
 | [LMSupply.Ocr](docs/ocr.md) | Document OCR | [![NuGet](https://img.shields.io/nuget/v/LMSupply.Ocr.svg)](https://www.nuget.org/packages/LMSupply.Ocr) |
 | [LMSupply.Detector](docs/detector.md) | Object detection | [![NuGet](https://img.shields.io/nuget/v/LMSupply.Detector.svg)](https://www.nuget.org/packages/LMSupply.Detector) |
@@ -70,6 +70,7 @@ float[] embedding = await model.EmbedAsync("Hello, world!");
 | [LMSupply.Translator](docs/translator.md) | Neural machine translation | [![NuGet](https://img.shields.io/nuget/v/LMSupply.Translator.svg)](https://www.nuget.org/packages/LMSupply.Translator) |
 | [LMSupply.Transcriber](docs/transcriber.md) | Speech → Text (Whisper) | [![NuGet](https://img.shields.io/nuget/v/LMSupply.Transcriber.svg)](https://www.nuget.org/packages/LMSupply.Transcriber) |
 | [LMSupply.Synthesizer](docs/synthesizer.md) | Text → Speech (Piper) | [![NuGet](https://img.shields.io/nuget/v/LMSupply.Synthesizer.svg)](https://www.nuget.org/packages/LMSupply.Synthesizer) |
+| [LMSupply.Llama](docs/llama.md) | Shared llama.cpp runtime for GGUF | [![NuGet](https://img.shields.io/nuget/v/LMSupply.Llama.svg)](https://www.nuget.org/packages/LMSupply.Llama) |
 
 ---
 
@@ -80,13 +81,14 @@ float[] embedding = await model.EmbedAsync("Hello, world!");
 ```csharp
 using LMSupply.Embedder;
 
+// ONNX models (default)
 await using var model = await LocalEmbedder.LoadAsync("default");
 
 // Single text
 float[] embedding = await model.EmbedAsync("Hello, world!");
 
 // Batch processing
-float[][] embeddings = await model.EmbedBatchAsync(new[]
+float[][] embeddings = await model.EmbedAsync(new[]
 {
     "First document",
     "Second document",
@@ -94,7 +96,11 @@ float[][] embeddings = await model.EmbedBatchAsync(new[]
 });
 
 // Similarity
-float similarity = model.CosineSimilarity(embeddings[0], embeddings[1]);
+float similarity = LocalEmbedder.CosineSimilarity(embeddings[0], embeddings[1]);
+
+// GGUF models (via LLamaSharp) - Auto-detected by repo name pattern
+await using var ggufModel = await LocalEmbedder.LoadAsync("nomic-ai/nomic-embed-text-v1.5-GGUF");
+float[] ggufEmbedding = await ggufModel.EmbedAsync("Hello from GGUF!");
 ```
 
 ### Semantic Reranking
@@ -126,25 +132,30 @@ foreach (var result in results)
 ```csharp
 using LMSupply.Generator;
 
-// Simple generation
+// ONNX models (via GenAI)
 var generator = await TextGeneratorBuilder.Create()
-    .WithDefaultModel()  // Phi-3.5 Mini
+    .WithDefaultModel()  // Phi-4-mini-instruct
     .BuildAsync();
 
 string response = await generator.GenerateCompleteAsync("What is machine learning?");
 Console.WriteLine(response);
 
-// Chat format
+// GGUF models (via LLamaSharp) - Access to thousands of quantized models
+await using var model = await LocalGenerator.LoadAsync("gguf:default");  // Llama 3.2 3B
+
+await foreach (var token in model.GenerateAsync("Hello, my name is"))
+{
+    Console.Write(token);
+}
+
+// Chat format with GGUF
 var messages = new[]
 {
-    new ChatMessage(ChatRole.System, "You are a helpful assistant."),
-    new ChatMessage(ChatRole.User, "Explain quantum computing simply.")
+    ChatMessage.System("You are a helpful assistant."),
+    ChatMessage.User("Explain quantum computing simply.")
 };
 
-string chatResponse = await generator.GenerateChatCompleteAsync(messages);
-
-// Streaming
-await foreach (var token in generator.GenerateAsync("Write a story:"))
+await foreach (var token in model.GenerateChatAsync(messages))
 {
     Console.Write(token);
 }
@@ -210,7 +221,7 @@ Console.WriteLine($"Real-time factor: {result.RealTimeFactor:F1}x");
 
 *Updated: 2025-12 based on MTEB leaderboard and community benchmarks*
 
-### Embedder
+### Embedder (ONNX)
 
 | Alias | Model | Dims | Params | Context | Best For |
 |-------|-------|------|--------|---------|----------|
@@ -219,6 +230,17 @@ Console.WriteLine($"Real-time factor: {result.RealTimeFactor:F1}x");
 | `quality` | bge-base-en-v1.5 | 768 | 110M | 512 | Higher accuracy |
 | `large` | nomic-embed-text-v1.5 | 768 | 137M | 8192 | Long context RAG |
 | `multilingual` | multilingual-e5-base | 768 | 278M | 512 | 100+ languages |
+
+### Embedder (GGUF via LLamaSharp)
+
+GGUF models are auto-detected by `-GGUF` or `_gguf` in repo name, or `.gguf` file extension.
+
+| Model Repository | Dims | Context | Best For |
+|------------------|------|---------|----------|
+| `nomic-ai/nomic-embed-text-v1.5-GGUF` | 768 | 8K | Long context, matryoshka |
+| `BAAI/bge-small-en-v1.5-GGUF` | 384 | 512 | Compact and fast |
+| `BAAI/bge-base-en-v1.5-GGUF` | 768 | 512 | Quality balance |
+| Any HuggingFace GGUF embedding repo | varies | varies | Custom models |
 
 ### Reranker
 
@@ -230,7 +252,7 @@ Console.WriteLine($"Real-time factor: {result.RealTimeFactor:F1}x");
 | `large` | bge-reranker-large | 560M | 512 | Best accuracy |
 | `multilingual` | bge-reranker-v2-m3 | 568M | 8192 | Long docs, 100+ languages |
 
-### Generator
+### Generator (ONNX)
 
 | Alias | Model | Params | Context | License | Best For |
 |-------|-------|--------|---------|---------|----------|
@@ -239,6 +261,18 @@ Console.WriteLine($"Real-time factor: {result.RealTimeFactor:F1}x");
 | `quality` | phi-4 | 14B | 16K | MIT | Best reasoning |
 | `medium` | Phi-3.5-mini-instruct | 3.8B | 128K | MIT | Long context |
 | `multilingual` | gemma-2-2b-it | 2B | 8K | Gemma ToU | Multi-language |
+
+### Generator (GGUF via LLamaSharp)
+
+| Alias | Model | Params | Context | Best For |
+|-------|-------|--------|---------|----------|
+| `gguf:default` | Llama 3.2 3B Instruct | 3B | 8K | Balanced quality/speed |
+| `gguf:fast` | Llama 3.2 1B Instruct | 1B | 8K | Quick responses |
+| `gguf:quality` | Qwen 2.5 7B Instruct | 7B | 32K | Higher quality |
+| `gguf:large` | Qwen 2.5 14B Instruct | 14B | 32K | Best quality |
+| `gguf:korean` | EXAONE 3.5 7.8B | 7.8B | 32K | Korean language |
+| `gguf:code` | Qwen 2.5 Coder 7B | 7B | 32K | Coding tasks |
+| `gguf:reasoning` | DeepSeek R1 Distill 8B | 8B | 32K | Complex reasoning |
 
 ### Translator
 
