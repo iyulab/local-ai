@@ -13,15 +13,18 @@ internal sealed class OnnxInferenceEngine : IDisposable
     private readonly InferenceSession _session;
     private readonly bool _hasTokenTypeIds;
     private readonly string _outputName;
+    private readonly bool _isGpuProvider;
+    private readonly object _sessionLock = new();
 
     public int HiddenSize { get; }
 
-    private OnnxInferenceEngine(InferenceSession session, int hiddenSize, bool hasTokenTypeIds, string outputName)
+    private OnnxInferenceEngine(InferenceSession session, int hiddenSize, bool hasTokenTypeIds, string outputName, bool isGpuProvider)
     {
         _session = session;
         HiddenSize = hiddenSize;
         _hasTokenTypeIds = hasTokenTypeIds;
         _outputName = outputName;
+        _isGpuProvider = isGpuProvider;
     }
 
     /// <summary>
@@ -49,7 +52,7 @@ internal sealed class OnnxInferenceEngine : IDisposable
             progress,
             cancellationToken);
 
-        return CreateFromSession(session);
+        return CreateFromSession(session, IsGpuProvider(provider));
     }
 
     /// <summary>
@@ -62,7 +65,15 @@ internal sealed class OnnxInferenceEngine : IDisposable
             throw new ModelNotFoundException("Model file not found", modelPath);
 
         var session = OnnxSessionFactory.Create(modelPath, provider, ConfigureOptions);
-        return CreateFromSession(session);
+        return CreateFromSession(session, IsGpuProvider(provider));
+    }
+
+    private static bool IsGpuProvider(ExecutionProvider provider)
+    {
+        return provider is ExecutionProvider.Cuda
+            or ExecutionProvider.DirectML
+            or ExecutionProvider.CoreML
+            or ExecutionProvider.Auto; // Auto may select GPU, so treat as GPU for safety
     }
 
     private static void ConfigureOptions(SessionOptions options)
@@ -75,7 +86,7 @@ internal sealed class OnnxInferenceEngine : IDisposable
         options.InterOpNumThreads = 1;
     }
 
-    private static OnnxInferenceEngine CreateFromSession(InferenceSession session)
+    private static OnnxInferenceEngine CreateFromSession(InferenceSession session, bool isGpuProvider)
     {
         // Detect model configuration from metadata
         var inputNames = session.InputMetadata.Keys.ToHashSet();
@@ -86,7 +97,7 @@ internal sealed class OnnxInferenceEngine : IDisposable
         string outputName = outputMeta.Key;
         int hiddenSize = (int)outputMeta.Value.Dimensions[^1]; // Last dimension is hidden size
 
-        return new OnnxInferenceEngine(session, hiddenSize, hasTokenTypeIds, outputName);
+        return new OnnxInferenceEngine(session, hiddenSize, hasTokenTypeIds, outputName, isGpuProvider);
     }
 
     /// <summary>
@@ -151,15 +162,26 @@ internal sealed class OnnxInferenceEngine : IDisposable
 
     /// <summary>
     /// Runs batch inference with parallel processing for CPU-bound workloads.
+    /// GPU providers use sequential processing since ONNX Runtime sessions are not thread-safe
+    /// for GPU execution providers like DirectML and CUDA.
     /// </summary>
     public float[][] RunBatchInferenceParallel(long[][] inputIds, long[][] attentionMasks)
     {
         int batchSize = inputIds.Length;
         var results = new float[batchSize][];
 
-        // Use parallel processing for large batches
-        if (batchSize > 4)
+        // GPU providers: use sequential processing (session is not thread-safe for GPU)
+        // CPU provider with small batches: also use sequential (avoid parallel overhead)
+        if (_isGpuProvider || batchSize <= 4)
         {
+            for (int i = 0; i < batchSize; i++)
+            {
+                results[i] = RunInference(inputIds[i], attentionMasks[i]);
+            }
+        }
+        else
+        {
+            // CPU provider with large batches: use parallel processing
             var parallelOptions = new ParallelOptions
             {
                 MaxDegreeOfParallelism = Math.Min(Environment.ProcessorCount, batchSize)
@@ -169,14 +191,6 @@ internal sealed class OnnxInferenceEngine : IDisposable
             {
                 results[i] = RunInference(inputIds[i], attentionMasks[i]);
             });
-        }
-        else
-        {
-            // Sequential for small batches (avoid parallel overhead)
-            for (int i = 0; i < batchSize; i++)
-            {
-                results[i] = RunInference(inputIds[i], attentionMasks[i]);
-            }
         }
 
         return results;

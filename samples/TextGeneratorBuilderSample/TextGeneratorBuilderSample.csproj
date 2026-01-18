@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\LMSupply.Generator\LMSupply.Generator.csproj" />
+  </ItemGroup>
+
+  <!--
+    No native packages needed!
+    ONNX Runtime GenAI binaries are downloaded on-demand from NuGet.org at runtime.
+    This sample tests the fix for DllNotFoundException when using TextGeneratorBuilder.
+  -->
+
+</Project>

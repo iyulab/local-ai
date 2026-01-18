@@ -194,14 +194,21 @@ public sealed class TextGeneratorBuilder
     /// <returns>The configured text generator.</returns>
     public async Task<IGeneratorModel> BuildAsync(CancellationToken cancellationToken = default)
     {
-        var modelPath = await ResolveModelPathAsync(cancellationToken);
-
-        if (string.IsNullOrEmpty(modelPath))
+        // Validate that a model is configured before downloading runtime
+        if (string.IsNullOrEmpty(_modelPath) && string.IsNullOrEmpty(_modelId))
         {
             throw new InvalidOperationException(
                 "Model path or ID is required. Use WithModelPath(), WithHuggingFaceModel(), or WithDefaultModel().");
         }
 
+        // Ensure GenAI runtime binaries are available before loading the model
+        // This downloads onnxruntime and onnxruntime-genai native binaries on first use
+        await Internal.GeneratorModelLoader.EnsureGenAiRuntimeAsync(
+            _modelOptions.Provider,
+            progress: null,
+            cancellationToken);
+
+        var modelPath = await ResolveModelPathAsync(cancellationToken);
         var modelId = _modelId ?? Path.GetFileName(modelPath);
         var chatFormatter = ResolveChatFormatter(modelId);
 

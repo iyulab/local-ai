@@ -1,3 +1,4 @@
+using LMSupply.Core.Download;
 using LMSupply.Download;
 using LMSupply.Generator.Abstractions;
 using LMSupply.Generator.ChatFormatters;
@@ -13,6 +14,8 @@ public sealed class OnnxGeneratorModelFactory : IGeneratorModelFactory, IDisposa
     private readonly ExecutionProvider _defaultProvider;
     private readonly HuggingFaceDownloader _downloader;
     private bool _disposed;
+
+    private const string DefaultRevision = "main";
 
     /// <summary>
     /// Files required for ONNX GenAI models.
@@ -79,13 +82,14 @@ public sealed class OnnxGeneratorModelFactory : IGeneratorModelFactory, IDisposa
     /// <inheritdoc />
     public bool IsModelAvailable(string modelId)
     {
-        var modelPath = GetModelCachePath(modelId);
-        if (!Directory.Exists(modelPath))
-            return false;
+        var snapshotPath = GetModelCachePath(modelId);
 
-        // Check for required ONNX GenAI files
-        return File.Exists(Path.Combine(modelPath, "genai_config.json"))
-            || File.Exists(Path.Combine(modelPath, "model.onnx"));
+        // Check if model exists directly in snapshot
+        if (IsValidModelDirectory(snapshotPath))
+            return true;
+
+        // Check for variant subdirectories
+        return FindVariantSubfolder(snapshotPath) != null;
     }
 
     /// <inheritdoc />
@@ -129,22 +133,27 @@ public sealed class OnnxGeneratorModelFactory : IGeneratorModelFactory, IDisposa
     }
 
     /// <summary>
-    /// Determines the variant subfolder based on the model and provider.
+    /// Determines the variant subfolder based on model registry info and provider.
     /// </summary>
     private string? GetVariantSubfolder(string modelId)
     {
-        // Check if model has variant subfolders (common for ONNX GenAI models)
+        // First, check ModelRegistry for explicit subfolder configuration
         var modelInfo = ModelRegistry.GetModel(modelId);
+        if (modelInfo?.Subfolder != null)
+        {
+            // Registry may have provider-neutral subfolder (e.g., "cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4")
+            // Adapt based on provider if needed
+            return AdaptSubfolderForProvider(modelInfo.Subfolder, _defaultProvider);
+        }
 
-        // For Microsoft Phi models, they typically have variant subfolders
-        if (modelId.Contains("phi", StringComparison.OrdinalIgnoreCase) ||
-            modelId.Contains("onnx", StringComparison.OrdinalIgnoreCase))
+        // Fallback for unregistered models: infer from model ID patterns
+        if (modelId.Contains("phi", StringComparison.OrdinalIgnoreCase) && modelId.Contains("onnx", StringComparison.OrdinalIgnoreCase))
         {
             return _defaultProvider switch
             {
-                ExecutionProvider.Cuda => "cuda-int4-rtn-block-32",
-                ExecutionProvider.DirectML => "directml-int4-awq-block-128",
-                _ => "cpu-int4-rtn-block-32-acc-level-4"
+                ExecutionProvider.Cuda => "cuda/cuda-int4-rtn-block-32",
+                ExecutionProvider.DirectML => "directml/directml-int4-awq-block-128",
+                _ => "cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4"
             };
         }
 
@@ -152,82 +161,115 @@ public sealed class OnnxGeneratorModelFactory : IGeneratorModelFactory, IDisposa
     }
 
     /// <summary>
-    /// Gets the cache path for a model.
+    /// Adapts a registry subfolder for the target execution provider.
     /// </summary>
-    public string GetModelCachePath(string modelId)
+    private static string AdaptSubfolderForProvider(string subfolder, ExecutionProvider provider)
     {
-        // HuggingFace cache format: models--org--name
-        var safeName = modelId.Replace("/", "--");
-        return Path.Combine(_cacheDirectory, $"models--{safeName}");
+        // If the subfolder is already provider-specific, use as-is
+        if (subfolder.Contains("cuda", StringComparison.OrdinalIgnoreCase) ||
+            subfolder.Contains("directml", StringComparison.OrdinalIgnoreCase) ||
+            subfolder.Contains("cpu", StringComparison.OrdinalIgnoreCase))
+        {
+            return provider switch
+            {
+                // For CUDA, try to find cuda variant
+                ExecutionProvider.Cuda when subfolder.Contains("cpu", StringComparison.OrdinalIgnoreCase)
+                    => subfolder.Replace("cpu_and_mobile", "cuda").Replace("cpu-", "cuda-"),
+                // For DirectML, try to find directml variant
+                ExecutionProvider.DirectML when subfolder.Contains("cpu", StringComparison.OrdinalIgnoreCase)
+                    => subfolder.Replace("cpu_and_mobile", "directml").Replace("cpu-", "directml-"),
+                _ => subfolder
+            };
+        }
+
+        return subfolder;
     }
 
     /// <summary>
-    /// Lists all locally available models.
+    /// Gets the cache path for a model, following HuggingFace cache structure.
+    /// </summary>
+    public string GetModelCachePath(string modelId)
+    {
+        // Use CacheManager for consistent path resolution
+        // Structure: models--{org}--{name}/snapshots/{revision}
+        return CacheManager.GetModelDirectory(_cacheDirectory, modelId, DefaultRevision);
+    }
+
+    /// <summary>
+    /// Lists all locally available generator models.
     /// </summary>
     public IReadOnlyList<string> GetAvailableModels()
     {
-        if (!Directory.Exists(_cacheDirectory))
-            return [];
-
-        var models = new List<string>();
-        foreach (var dir in Directory.GetDirectories(_cacheDirectory, "models--*"))
-        {
-            var dirName = Path.GetFileName(dir);
-            if (dirName.StartsWith("models--"))
-            {
-                var modelId = dirName["models--".Length..].Replace("--", "/");
-
-                // Verify it's a valid ONNX GenAI model
-                if (File.Exists(Path.Combine(dir, "genai_config.json"))
-                    || HasOnnxSubdirectory(dir))
-                {
-                    models.Add(modelId);
-                }
-            }
-        }
-
-        return models;
+        // Use CacheManager's type detection for consistent discovery
+        return CacheManager.GetCachedModelsByType(_cacheDirectory, ModelType.Generator)
+            .Select(m => m.RepoId)
+            .ToList();
     }
 
     private async Task<string> ResolveModelPathAsync(string modelId, CancellationToken cancellationToken)
     {
-        var cachePath = GetModelCachePath(modelId);
+        // Get proper HuggingFace cache path (models--{org}--{name}/snapshots/{revision})
+        var snapshotPath = GetModelCachePath(modelId);
 
-        // Check if model exists directly
-        if (IsValidModelDirectory(cachePath))
-            return cachePath;
+        // Check if model exists directly in snapshot
+        if (IsValidModelDirectory(snapshotPath))
+            return snapshotPath;
 
-        // Check for snapshot subdirectory (HuggingFace cache format)
-        var snapshotsDir = Path.Combine(cachePath, "snapshots");
-        if (Directory.Exists(snapshotsDir))
-        {
-            var snapshots = Directory.GetDirectories(snapshotsDir);
-            if (snapshots.Length > 0)
-            {
-                // Use most recent snapshot
-                var latestSnapshot = snapshots.OrderByDescending(Directory.GetLastWriteTimeUtc).First();
-                if (IsValidModelDirectory(latestSnapshot))
-                    return latestSnapshot;
-            }
-        }
-
-        // Check for variant subdirectories (cpu-int4, cuda-int4, etc.)
-        var variants = new[] { "cpu-int4-rtn-block-32-acc-level-4", "cpu-int4", "cuda-int4", "directml-int4" };
-        foreach (var variant in variants)
-        {
-            var variantPath = Path.Combine(cachePath, variant);
-            if (IsValidModelDirectory(variantPath))
-                return variantPath;
-        }
+        // Check for variant subdirectories within snapshot (cpu-int4, cuda-int4, etc.)
+        var foundPath = FindVariantSubfolder(snapshotPath);
+        if (foundPath != null)
+            return foundPath;
 
         // Model not found - attempt download
         await DownloadModelAsync(modelId, null, cancellationToken);
 
-        // After download, try again
-        if (IsValidModelDirectory(cachePath))
-            return cachePath;
+        // After download, check again
+        if (IsValidModelDirectory(snapshotPath))
+            return snapshotPath;
 
-        throw new FileNotFoundException($"Model '{modelId}' not found at {cachePath}");
+        // Check variants again after download
+        foundPath = FindVariantSubfolder(snapshotPath);
+        if (foundPath != null)
+            return foundPath;
+
+        throw new FileNotFoundException($"Model '{modelId}' not found at {snapshotPath}");
+    }
+
+    /// <summary>
+    /// Finds a valid variant subfolder within the model directory.
+    /// </summary>
+    private string? FindVariantSubfolder(string basePath)
+    {
+        if (!Directory.Exists(basePath))
+            return null;
+
+        // Provider-specific variant prefixes in priority order
+        var variantPatterns = _defaultProvider switch
+        {
+            ExecutionProvider.Cuda => new[] { "cuda", "gpu", "cpu" },
+            ExecutionProvider.DirectML => new[] { "directml", "gpu", "cpu" },
+            _ => new[] { "cpu", "gpu" }
+        };
+
+        foreach (var pattern in variantPatterns)
+        {
+            // Find subdirectories matching the pattern
+            foreach (var subdir in Directory.GetDirectories(basePath))
+            {
+                var dirName = Path.GetFileName(subdir);
+                if (dirName.StartsWith(pattern, StringComparison.OrdinalIgnoreCase) && IsValidModelDirectory(subdir))
+                    return subdir;
+            }
+        }
+
+        // Fallback: check any subdirectory that's a valid model
+        foreach (var subdir in Directory.GetDirectories(basePath))
+        {
+            if (IsValidModelDirectory(subdir))
+                return subdir;
+        }
+
+        return null;
     }
 
     private static bool IsValidModelDirectory(string path)
@@ -238,20 +280,6 @@ public sealed class OnnxGeneratorModelFactory : IGeneratorModelFactory, IDisposa
         return File.Exists(Path.Combine(path, "genai_config.json"))
             || File.Exists(Path.Combine(path, "model.onnx"))
             || File.Exists(Path.Combine(path, "model.onnx.data"));
-    }
-
-    private static bool HasOnnxSubdirectory(string path)
-    {
-        if (!Directory.Exists(path))
-            return false;
-
-        foreach (var subdir in Directory.GetDirectories(path))
-        {
-            if (IsValidModelDirectory(subdir))
-                return true;
-        }
-
-        return false;
     }
 
     private static IChatFormatter ResolveChatFormatter(string modelId, string? explicitFormat)

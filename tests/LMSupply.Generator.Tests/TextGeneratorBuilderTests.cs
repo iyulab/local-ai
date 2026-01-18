@@ -107,4 +107,39 @@ public class TextGeneratorBuilderTests
         var action = () => builder.WithHuggingFaceModel(null!);
         action.Should().Throw<ArgumentNullException>();
     }
+
+    [Fact]
+    public void WithMemoryManagement_NullOptions_ThrowsArgumentNullException()
+    {
+        // Arrange
+        var builder = TextGeneratorBuilder.Create();
+
+        // Act & Assert
+        var action = () => builder.WithMemoryManagement(null!);
+        action.Should().Throw<ArgumentNullException>();
+    }
+
+    [Fact]
+    public void WithCacheDirectory_SetsDirectory()
+    {
+        // Arrange
+        var builder = TextGeneratorBuilder.Create();
+
+        // Act & Assert - should not throw
+        builder.WithCacheDirectory("C:/cache");
+    }
+
+    [Fact]
+    public void WithChatFormat_SetsFormat()
+    {
+        // Arrange
+        var builder = TextGeneratorBuilder.Create();
+
+        // Act & Assert - should not throw
+        builder.WithChatFormat("phi3");
+    }
+
+    // Note: Integration test for runtime loading is in the sample project
+    // TextGeneratorBuilderSample validates that EnsureGenAiRuntimeAsync is called
+    // before OnnxGeneratorModel creation, fixing the DllNotFoundException issue.
 }

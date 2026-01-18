@@ -9,7 +9,7 @@ namespace LMSupply.Llama;
 /// Manages llama.cpp native binary download and configuration.
 /// Follows LMSupply's on-demand philosophy: binaries are downloaded only when first needed.
 /// </summary>
-public sealed class LlamaRuntimeManager
+public sealed class LlamaRuntimeManager : IAsyncDisposable
 {
     private static readonly Lazy<LlamaRuntimeManager> _instance = new(() => new());
 
@@ -20,6 +20,7 @@ public sealed class LlamaRuntimeManager
 
     private readonly SemaphoreSlim _initLock = new(1, 1);
     private bool _initialized;
+    private bool _disposed;
     private LlamaBackend _activeBackend;
     private string? _binaryPath;
 
@@ -50,6 +51,8 @@ public sealed class LlamaRuntimeManager
         IProgress<DownloadProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {
+        ThrowIfDisposed();
+
         if (_initialized)
             return;
 
@@ -372,5 +375,26 @@ public sealed class LlamaRuntimeManager
         sb.AppendLine($"Recommended Backends: {string.Join(" → ", fallbackChain)}");
 
         return sb.ToString().TrimEnd();
+    }
+
+    /// <summary>
+    /// Disposes resources held by the runtime manager.
+    /// Note: Singleton pattern means this is typically called only at application shutdown.
+    /// </summary>
+    public ValueTask DisposeAsync()
+    {
+        if (_disposed)
+            return ValueTask.CompletedTask;
+
+        _disposed = true;
+        _initialized = false;
+        _initLock.Dispose();
+
+        return ValueTask.CompletedTask;
+    }
+
+    private void ThrowIfDisposed()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
     }
 }

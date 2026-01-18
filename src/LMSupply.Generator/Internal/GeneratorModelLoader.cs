@@ -199,8 +199,9 @@ internal static class GeneratorModelLoader
     /// <summary>
     /// Ensures GenAI runtime binaries (onnxruntime-genai) are downloaded for the specified provider.
     /// Also ensures the base onnxruntime binaries are available since genai depends on them.
+    /// This method is internal to allow TextGeneratorBuilder to call it.
     /// </summary>
-    private static async Task EnsureGenAiRuntimeAsync(
+    internal static async Task EnsureGenAiRuntimeAsync(
         ExecutionProvider provider,
         IProgress<DownloadProgress>? progress,
         CancellationToken cancellationToken)

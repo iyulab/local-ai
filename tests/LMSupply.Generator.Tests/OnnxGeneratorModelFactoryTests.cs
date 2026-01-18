@@ -50,8 +50,10 @@ public class OnnxGeneratorModelFactoryTests
         // Act
         var path = factory.GetModelCachePath("microsoft/Phi-3.5-mini-instruct-onnx");
 
-        // Assert
+        // Assert - now uses HuggingFace cache structure: models--{org}--{name}/snapshots/{revision}
         path.Should().Contain("models--microsoft--Phi-3.5-mini-instruct-onnx");
+        path.Should().Contain("snapshots");
+        path.Should().EndWith("main");
     }
 
     [Fact]
@@ -97,7 +99,8 @@ public class OnnxGeneratorModelFactoryTests
     {
         // Arrange
         var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
-        var modelDir = Path.Combine(tempDir, "models--test--model");
+        // HuggingFace cache structure: models--{org}--{name}/snapshots/{revision}
+        var modelDir = Path.Combine(tempDir, "models--test--model", "snapshots", "main");
         Directory.CreateDirectory(modelDir);
         try
         {

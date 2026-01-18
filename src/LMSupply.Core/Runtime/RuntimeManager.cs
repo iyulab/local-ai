@@ -14,6 +14,7 @@ public sealed class RuntimeManager : IAsyncDisposable
     private readonly SemaphoreSlim _initLock = new(1, 1);
 
     private bool _initialized;
+    private bool _disposed;
     private PlatformInfo? _platform;
     private GpuInfo? _gpu;
 
@@ -58,6 +59,8 @@ public sealed class RuntimeManager : IAsyncDisposable
     /// </summary>
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
+        ThrowIfDisposed();
+
         if (_initialized)
             return;
 
@@ -145,23 +148,27 @@ public sealed class RuntimeManager : IAsyncDisposable
         IProgress<DownloadProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {
+        ThrowIfDisposed();
         await InitializeAsync(cancellationToken);
+
+        // Normalize package type
+        var packageType = NormalizePackageType(package);
 
         // If provider is explicitly specified, download for that provider
         if (!string.IsNullOrEmpty(provider))
         {
-            return await DownloadRuntimeForProviderAsync(provider, version, progress, cancellationToken);
+            return await DownloadRuntimeForProviderAsync(provider, packageType, version, progress, cancellationToken);
         }
 
         // Auto mode: try providers in fallback chain order
-        var chain = GetProviderFallbackChain();
+        var chain = GetProviderFallbackChain(packageType);
         Exception? lastException = null;
 
         foreach (var providerToTry in chain)
         {
             try
             {
-                return await DownloadRuntimeForProviderAsync(providerToTry, version, progress, cancellationToken);
+                return await DownloadRuntimeForProviderAsync(providerToTry, packageType, version, progress, cancellationToken);
             }
             catch (OperationCanceledException)
             {
@@ -177,7 +184,7 @@ public sealed class RuntimeManager : IAsyncDisposable
         }
 
         // Should not reach here since CPU is always in chain
-        throw lastException ?? new InvalidOperationException("No provider available for ONNX Runtime");
+        throw lastException ?? new InvalidOperationException($"No provider available for {packageType}");
     }
 
     /// <summary>
@@ -185,6 +192,7 @@ public sealed class RuntimeManager : IAsyncDisposable
     /// </summary>
     private async Task<string> DownloadRuntimeForProviderAsync(
         string provider,
+        string packageType,
         string? version,
         IProgress<DownloadProgress>? progress,
         CancellationToken cancellationToken)
@@ -194,12 +202,34 @@ public sealed class RuntimeManager : IAsyncDisposable
             _platform!,
             version,
             progress,
-            cancellationToken);
+            cancellationToken,
+            packageType);
+
+        // Get the primary library name from registry
+        var config = RuntimePackageRegistry.GetPackageConfig(packageType, provider, _platform!.RuntimeIdentifier);
+        var primaryLibrary = config?.NativeLibraryName ?? "onnxruntime";
 
         // Register with NativeLoader for DLL resolution
-        NativeLoader.Instance.RegisterDirectory(binaryPath, preload: true, primaryLibrary: "onnxruntime");
+        NativeLoader.Instance.RegisterDirectory(binaryPath, preload: true, primaryLibrary: primaryLibrary);
 
         return binaryPath;
+    }
+
+    /// <summary>
+    /// Normalizes the package type string to a standard format.
+    /// </summary>
+    private static string NormalizePackageType(string package)
+    {
+        if (string.IsNullOrEmpty(package))
+            return RuntimePackageRegistry.PackageTypes.OnnxRuntime;
+
+        // Handle common aliases
+        return package.ToLowerInvariant() switch
+        {
+            "onnxruntime" or "onnx" or "runtime" => RuntimePackageRegistry.PackageTypes.OnnxRuntime,
+            "onnxruntime-genai" or "genai" or "gen-ai" or "generator" => RuntimePackageRegistry.PackageTypes.OnnxRuntimeGenAI,
+            _ => package.ToLowerInvariant()
+        };
     }
 
     /// <summary>
@@ -227,25 +257,45 @@ public sealed class RuntimeManager : IAsyncDisposable
     /// </summary>
     public IReadOnlyList<string> GetProviderFallbackChain()
     {
+        return GetProviderFallbackChain(RuntimePackageRegistry.PackageTypes.OnnxRuntime);
+    }
+
+    /// <summary>
+    /// Gets a prioritized list of providers to try based on detected hardware and package type.
+    /// Different package types may support different provider sets.
+    /// </summary>
+    public IReadOnlyList<string> GetProviderFallbackChain(string packageType)
+    {
         var chain = new List<string>();
+        var supportedProviders = RuntimePackageRegistry.GetSupportedProviders(packageType).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         if (_gpu is not null)
         {
             // CUDA first (if NVIDIA GPU with sufficient driver)
             if (_gpu.Vendor == GpuVendor.Nvidia)
             {
-                if (_gpu.CudaDriverVersionMajor >= 12)
-                    chain.Add("cuda12");
-                else if (_gpu.CudaDriverVersionMajor >= 11)
-                    chain.Add("cuda11");
+                // For GenAI, use generic "cuda" which maps to CUDA package
+                if (packageType.Equals(RuntimePackageRegistry.PackageTypes.OnnxRuntimeGenAI, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (_gpu.CudaDriverVersionMajor >= 11 && supportedProviders.Contains("cuda"))
+                        chain.Add("cuda");
+                }
+                else
+                {
+                    // For standard ONNX Runtime, use specific CUDA versions
+                    if (_gpu.CudaDriverVersionMajor >= 12 && supportedProviders.Contains("cuda12"))
+                        chain.Add("cuda12");
+                    else if (_gpu.CudaDriverVersionMajor >= 11 && supportedProviders.Contains("cuda11"))
+                        chain.Add("cuda11");
+                }
             }
 
             // DirectML (Windows with D3D12 support - works with AMD, Intel, NVIDIA)
-            if (_gpu.DirectMLSupported)
+            if (_gpu.DirectMLSupported && supportedProviders.Contains("directml"))
                 chain.Add("directml");
 
             // CoreML (macOS/iOS)
-            if (_gpu.CoreMLSupported)
+            if (_gpu.CoreMLSupported && supportedProviders.Contains("coreml"))
                 chain.Add("coreml");
         }
 
@@ -285,8 +335,18 @@ public sealed class RuntimeManager : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        if (_disposed)
+            return;
+
+        _disposed = true;
+        _initialized = false;
         _nugetDownloader.Dispose();
         _initLock.Dispose();
+    }
+
+    private void ThrowIfDisposed()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
     }
 }
 

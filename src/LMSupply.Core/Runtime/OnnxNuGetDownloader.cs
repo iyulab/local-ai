@@ -1,6 +1,5 @@
+using System.Diagnostics;
 using System.IO.Compression;
-using System.Reflection;
-using System.Runtime.InteropServices;
 using LMSupply.Download;
 
 namespace LMSupply.Runtime;
@@ -8,31 +7,14 @@ namespace LMSupply.Runtime;
 /// <summary>
 /// Downloads ONNX Runtime packages from NuGet.org and extracts native binaries.
 /// Implements LMSupply's on-demand philosophy: binaries are downloaded only when first needed.
+/// Supports both standard ONNX Runtime and ONNX Runtime GenAI packages.
 /// </summary>
 public sealed class OnnxNuGetDownloader : IDisposable
 {
-    private const string NuGetFlatContainerBase = "https://api.nuget.org/v3-flatcontainer";
-
-    // Package names for each provider (platform-independent)
-    private static readonly Dictionary<string, string> ProviderPackages = new()
-    {
-        ["cpu"] = "microsoft.ml.onnxruntime",
-        ["directml"] = "microsoft.ml.onnxruntime.directml",
-    };
-
-    /// <summary>
-    /// Gets the correct NuGet package ID for CUDA based on platform.
-    /// Windows uses microsoft.ml.onnxruntime.gpu.windows, Linux uses microsoft.ml.onnxruntime.gpu
-    /// </summary>
-    private static string GetCudaPackageId(PlatformInfo platform)
-    {
-        return platform.IsWindows
-            ? "microsoft.ml.onnxruntime.gpu.windows"
-            : "microsoft.ml.onnxruntime.gpu";
-    }
-
     private readonly HttpClient _httpClient;
+    private readonly NuGetPackageResolver _packageResolver;
     private readonly string _cacheDirectory;
+    private readonly bool _ownsHttpClient;
 
     public OnnxNuGetDownloader() : this(null)
     {
@@ -41,55 +23,132 @@ public sealed class OnnxNuGetDownloader : IDisposable
     public OnnxNuGetDownloader(string? cacheDirectory)
     {
         _cacheDirectory = cacheDirectory ?? GetDefaultCacheDirectory();
-        _httpClient = new HttpClient();
-        _httpClient.DefaultRequestHeaders.Add("User-Agent", "LMSupply/1.0");
+
+        // Create HttpClient first, then wrap in try-catch to ensure cleanup on failure
+        var httpClient = new HttpClient();
+        try
+        {
+            httpClient.DefaultRequestHeaders.Add("User-Agent", "LMSupply/1.0");
+            _packageResolver = new NuGetPackageResolver(httpClient);
+            _httpClient = httpClient;
+            _ownsHttpClient = true;
+        }
+        catch
+        {
+            httpClient.Dispose();
+            throw;
+        }
     }
 
     /// <summary>
-    /// Downloads the ONNX Runtime package and extracts native binaries.
-    /// Returns the path to the extracted native library directory.
+    /// Downloads runtime binaries for the specified package type and provider.
     /// </summary>
+    /// <param name="provider">The execution provider (cpu, directml, cuda12, etc.).</param>
+    /// <param name="platform">The target platform info.</param>
+    /// <param name="version">Optional version. If null, uses the latest stable version.</param>
+    /// <param name="progress">Optional progress reporter.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <param name="packageType">The package type: "onnxruntime" (default) or "onnxruntime-genai".</param>
+    /// <returns>Path to the extracted native binaries directory.</returns>
     public async Task<string> DownloadAsync(
         string provider,
         PlatformInfo platform,
         string? version = null,
         IProgress<DownloadProgress>? progress = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        string packageType = RuntimePackageRegistry.PackageTypes.OnnxRuntime)
     {
-        // Get ONNX Runtime version from assembly if not specified
-        version ??= GetOnnxRuntimeVersion();
+        // Get package configuration from registry
+        var config = RuntimePackageRegistry.GetPackageConfig(
+            packageType,
+            provider,
+            platform.RuntimeIdentifier);
 
-        // Determine package name
-        var providerKey = provider.ToLowerInvariant();
-        string packageId;
-        if (providerKey is "cuda" or "cuda11" or "cuda12")
+        if (config is null)
         {
-            packageId = GetCudaPackageId(platform);
+            throw new InvalidOperationException(
+                $"No package configuration found for {packageType}/{provider}");
         }
-        else if (!ProviderPackages.TryGetValue(providerKey, out packageId!))
-        {
-            packageId = ProviderPackages["cpu"]; // Fallback to CPU
-        }
+
+        // Resolve version dynamically if not specified
+        version ??= await ResolveVersionAsync(config.PackageId, cancellationToken);
 
         // Check cache first
-        var cachePath = GetCachePath(packageId, version, platform, providerKey);
-        if (Directory.Exists(cachePath) && IsValidCache(cachePath, platform))
+        var cachePath = GetCachePath(packageType, provider, version, platform);
+        if (Directory.Exists(cachePath) && IsValidCache(cachePath, config, platform))
         {
-            progress?.Report(new DownloadProgress
-            {
-                FileName = "ONNX Runtime native libraries",
-                BytesDownloaded = 1,
-                TotalBytes = 1
-            });
+            Debug.WriteLine($"[OnnxNuGetDownloader] Using cached binaries: {cachePath}");
+            ReportCacheHit(progress);
             return cachePath;
         }
 
-        // Download .nupkg from NuGet
-        var nupkgUrl = $"{NuGetFlatContainerBase}/{packageId}/{version}/{packageId}.{version}.nupkg";
+        // Download and extract
+        return await DownloadAndExtractAsync(
+            config,
+            version,
+            platform,
+            cachePath,
+            progress,
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// Resolves the version to use, either from assembly or NuGet API.
+    /// Validates that the version exists for the specific package before using it.
+    /// </summary>
+    private async Task<string> ResolveVersionAsync(
+        string packageId,
+        CancellationToken cancellationToken)
+    {
+        // First try to detect from loaded assembly
+        var assemblyVersion = TryGetAssemblyVersion(packageId);
+        if (!string.IsNullOrEmpty(assemblyVersion))
+        {
+            // Verify this version exists for the specific package
+            // (e.g., DirectML may have different version than base ONNX Runtime)
+            var availableVersions = await _packageResolver.GetVersionsAsync(packageId, cancellationToken);
+            if (availableVersions.Contains(assemblyVersion, StringComparer.OrdinalIgnoreCase))
+            {
+                Debug.WriteLine($"[OnnxNuGetDownloader] Using assembly version: {assemblyVersion}");
+                return assemblyVersion;
+            }
+
+            Debug.WriteLine($"[OnnxNuGetDownloader] Assembly version {assemblyVersion} not found for {packageId}, falling back to latest");
+        }
+
+        // Get latest stable version from NuGet
+        var latestVersion = await _packageResolver.GetLatestVersionAsync(
+            packageId,
+            includePrerelease: false,
+            cancellationToken);
+
+        if (string.IsNullOrEmpty(latestVersion))
+        {
+            throw new InvalidOperationException(
+                $"Could not determine version for package {packageId}. " +
+                "Please specify a version explicitly.");
+        }
+
+        Debug.WriteLine($"[OnnxNuGetDownloader] Using latest NuGet version: {latestVersion}");
+        return latestVersion;
+    }
+
+    /// <summary>
+    /// Downloads a package and extracts native binaries.
+    /// </summary>
+    private async Task<string> DownloadAndExtractAsync(
+        RuntimePackageRegistry.PackageConfig config,
+        string version,
+        PlatformInfo platform,
+        string cachePath,
+        IProgress<DownloadProgress>? progress,
+        CancellationToken cancellationToken)
+    {
+        var downloadUrl = NuGetPackageResolver.GetPackageDownloadUrl(config.PackageId, version);
 
         progress?.Report(new DownloadProgress
         {
-            FileName = $"{packageId}.{version}.nupkg",
+            FileName = $"{config.PackageId}.{version}.nupkg",
             BytesDownloaded = 0,
             TotalBytes = 0
         });
@@ -100,9 +159,9 @@ public sealed class OnnxNuGetDownloader : IDisposable
         {
             Directory.CreateDirectory(tempDir);
 
-            // Download nupkg
-            var nupkgPath = Path.Combine(tempDir, $"{packageId}.{version}.nupkg");
-            await DownloadFileAsync(nupkgUrl, nupkgPath, $"{packageId}.nupkg", progress, cancellationToken);
+            // Download .nupkg
+            var nupkgPath = Path.Combine(tempDir, $"{config.PackageId}.{version}.nupkg");
+            await DownloadFileAsync(downloadUrl, nupkgPath, config.PackageId, progress, cancellationToken);
 
             // Extract native binaries
             progress?.Report(new DownloadProgress
@@ -118,20 +177,16 @@ public sealed class OnnxNuGetDownloader : IDisposable
             if (extractedPath is null)
             {
                 throw new InvalidOperationException(
-                    $"No native binaries found for {platform.RuntimeIdentifier} in {packageId}");
+                    $"No native binaries found for {platform.RuntimeIdentifier} in {config.PackageId}");
             }
 
             // Move to cache
-            Directory.CreateDirectory(Path.GetDirectoryName(cachePath)!);
-            if (Directory.Exists(cachePath))
-            {
-                Directory.Delete(cachePath, recursive: true);
-            }
+            EnsureCacheDirectory(cachePath);
             Directory.Move(extractedPath, cachePath);
 
             progress?.Report(new DownloadProgress
             {
-                FileName = "ONNX Runtime native libraries ready",
+                FileName = $"{config.NativeLibraryName} ready",
                 BytesDownloaded = 1,
                 TotalBytes = 1
             });
@@ -140,18 +195,7 @@ public sealed class OnnxNuGetDownloader : IDisposable
         }
         finally
         {
-            // Cleanup temp directory
-            try
-            {
-                if (Directory.Exists(tempDir))
-                {
-                    Directory.Delete(tempDir, recursive: true);
-                }
-            }
-            catch
-            {
-                // Ignore cleanup errors
-            }
+            CleanupTempDirectory(tempDir);
         }
     }
 
@@ -166,41 +210,38 @@ public sealed class OnnxNuGetDownloader : IDisposable
         var tempExtract = Path.Combine(Path.GetDirectoryName(nupkgPath)!, "extracted");
         Directory.CreateDirectory(tempExtract);
 
-        // .nupkg is a ZIP file
-        using (var archive = ZipFile.OpenRead(nupkgPath))
+        using var archive = ZipFile.OpenRead(nupkgPath);
+
+        // NuGet package structure: runtimes/{rid}/native/
+        var runtimeIdentifiers = GetRuntimeIdentifiers(platform);
+
+        foreach (var rid in runtimeIdentifiers)
         {
-            // NuGet package structure: runtimes/{rid}/native/
-            var runtimeIdentifiers = GetRuntimeIdentifiers(platform);
+            var nativePrefix = $"runtimes/{rid}/native/";
 
-            foreach (var rid in runtimeIdentifiers)
+            var nativeEntries = archive.Entries
+                .Where(e => e.FullName.StartsWith(nativePrefix, StringComparison.OrdinalIgnoreCase)
+                            && !string.IsNullOrEmpty(e.Name))
+                .ToList();
+
+            if (nativeEntries.Count > 0)
             {
-                var nativePrefix = $"runtimes/{rid}/native/";
+                var outputDir = Path.Combine(tempExtract, rid);
+                Directory.CreateDirectory(outputDir);
 
-                var nativeEntries = archive.Entries
-                    .Where(e => e.FullName.StartsWith(nativePrefix, StringComparison.OrdinalIgnoreCase)
-                                && !string.IsNullOrEmpty(e.Name))
-                    .ToList();
-
-                if (nativeEntries.Count > 0)
+                foreach (var entry in nativeEntries)
                 {
-                    var outputDir = Path.Combine(tempExtract, rid);
-                    Directory.CreateDirectory(outputDir);
+                    var destPath = Path.Combine(outputDir, entry.Name);
+                    entry.ExtractToFile(destPath, overwrite: true);
 
-                    foreach (var entry in nativeEntries)
+                    // Set executable permission on Unix
+                    if (!platform.IsWindows)
                     {
-                        // ONNX Runtime doesn't have subdirectories like LLamaSharp
-                        var destPath = Path.Combine(outputDir, entry.Name);
-                        entry.ExtractToFile(destPath, overwrite: true);
-
-                        // Set executable permission on Unix
-                        if (!platform.IsWindows)
-                        {
-                            await SetExecutableAsync(destPath, cancellationToken);
-                        }
+                        await SetExecutableAsync(destPath, cancellationToken);
                     }
-
-                    return outputDir;
                 }
+
+                return outputDir;
             }
         }
 
@@ -212,43 +253,38 @@ public sealed class OnnxNuGetDownloader : IDisposable
     /// </summary>
     private static string[] GetRuntimeIdentifiers(PlatformInfo platform)
     {
-        var arch = platform.Architecture == Architecture.Arm64 ? "arm64" : "x64";
+        var arch = platform.Architecture == System.Runtime.InteropServices.Architecture.Arm64 ? "arm64" : "x64";
 
         if (platform.IsWindows)
-        {
             return [$"win-{arch}", "win"];
-        }
         if (platform.IsLinux)
-        {
             return [$"linux-{arch}", "linux"];
-        }
         if (platform.IsMacOS)
-        {
             return [$"osx-{arch}", "osx"];
-        }
 
         return ["any"];
     }
 
-    private string GetCachePath(string packageId, string version, PlatformInfo platform, string provider)
+    private string GetCachePath(string packageType, string provider, string version, PlatformInfo platform)
     {
         return Path.Combine(
             _cacheDirectory,
-            "onnxruntime",
-            provider,
+            packageType,
+            provider.ToLowerInvariant(),
             version,
             platform.RuntimeIdentifier);
     }
 
-    private static bool IsValidCache(string path, PlatformInfo platform)
+    private static bool IsValidCache(
+        string path,
+        RuntimePackageRegistry.PackageConfig config,
+        PlatformInfo platform)
     {
         if (!Directory.Exists(path))
             return false;
 
-        // Check for expected ONNX Runtime library file
-        var expectedLib = platform.IsWindows ? "onnxruntime.dll" :
-                          platform.IsMacOS ? "libonnxruntime.dylib" :
-                          "libonnxruntime.so";
+        var expectedLib = RuntimePackageRegistry.GetNativeLibraryFileName(
+            config.NativeLibraryName, platform);
 
         return Directory.EnumerateFiles(path, expectedLib + "*").Any();
     }
@@ -293,8 +329,7 @@ public sealed class OnnxNuGetDownloader : IDisposable
     {
         try
         {
-            // Use chmod on Unix systems
-            var process = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            var process = Process.Start(new ProcessStartInfo
             {
                 FileName = "chmod",
                 Arguments = $"+x \"{path}\"",
@@ -313,24 +348,36 @@ public sealed class OnnxNuGetDownloader : IDisposable
         }
     }
 
-    /// <summary>
-    /// Gets the ONNX Runtime version from the loaded assembly.
-    /// </summary>
-    private static string GetOnnxRuntimeVersion()
+    private static string? TryGetAssemblyVersion(string packageId)
     {
         try
         {
-            // Try to find ONNX Runtime assembly
+            // Map package ID to assembly name
+            var assemblyName = packageId.Replace(".ML.", ".ML.")
+                .Replace("GenAI", "RuntimeGenAI");
+
+            // Handle specific mappings
+            if (packageId.Contains("OnnxRuntimeGenAI", StringComparison.OrdinalIgnoreCase))
+            {
+                assemblyName = "Microsoft.ML.OnnxRuntimeGenAI";
+            }
+            else if (packageId.Contains("OnnxRuntime", StringComparison.OrdinalIgnoreCase))
+            {
+                assemblyName = "Microsoft.ML.OnnxRuntime";
+            }
+
             var assembly = AppDomain.CurrentDomain.GetAssemblies()
-                .FirstOrDefault(a => a.GetName().Name == "Microsoft.ML.OnnxRuntime");
+                .FirstOrDefault(a => a.GetName().Name?.Equals(assemblyName, StringComparison.OrdinalIgnoreCase) == true);
 
             if (assembly != null)
             {
-                // Try to get informational version
-                var infoVersionAttr = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>();
-                if (infoVersionAttr != null)
+                var infoAttr = assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
+                    .OfType<System.Reflection.AssemblyInformationalVersionAttribute>()
+                    .FirstOrDefault();
+
+                if (infoAttr != null)
                 {
-                    var ver = infoVersionAttr.InformationalVersion;
+                    var ver = infoAttr.InformationalVersion;
                     var plusIdx = ver.IndexOf('+');
                     if (plusIdx > 0)
                         ver = ver[..plusIdx];
@@ -338,7 +385,6 @@ public sealed class OnnxNuGetDownloader : IDisposable
                         return ver;
                 }
 
-                // Fallback to assembly version
                 var version = assembly.GetName().Version;
                 if (version != null && version.Major > 0)
                 {
@@ -351,8 +397,46 @@ public sealed class OnnxNuGetDownloader : IDisposable
             // Ignore
         }
 
-        // Fallback to known version that matches Directory.Packages.props
-        return "1.23.2";
+        return null;
+    }
+
+    private static void ReportCacheHit(IProgress<DownloadProgress>? progress)
+    {
+        progress?.Report(new DownloadProgress
+        {
+            FileName = "Using cached runtime (already downloaded)",
+            BytesDownloaded = 1,
+            TotalBytes = 1
+        });
+    }
+
+    private static void EnsureCacheDirectory(string cachePath)
+    {
+        var parentDir = Path.GetDirectoryName(cachePath);
+        if (!string.IsNullOrEmpty(parentDir))
+        {
+            Directory.CreateDirectory(parentDir);
+        }
+
+        if (Directory.Exists(cachePath))
+        {
+            Directory.Delete(cachePath, recursive: true);
+        }
+    }
+
+    private static void CleanupTempDirectory(string tempDir)
+    {
+        try
+        {
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, recursive: true);
+            }
+        }
+        catch
+        {
+            // Ignore cleanup errors
+        }
     }
 
     private static string GetDefaultCacheDirectory()
@@ -363,6 +447,10 @@ public sealed class OnnxNuGetDownloader : IDisposable
 
     public void Dispose()
     {
-        _httpClient.Dispose();
+        _packageResolver.Dispose();
+        if (_ownsHttpClient)
+        {
+            _httpClient.Dispose();
+        }
     }
 }
