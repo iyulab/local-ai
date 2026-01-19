@@ -12,6 +12,8 @@ internal static class GenAiConfigReader
 
     /// <summary>
     /// Reads the maximum context length from the model's genai_config.json.
+    /// Prioritizes model architecture limits (context_length, max_position_embeddings)
+    /// over generation defaults (search.max_length) which are often set to small values.
     /// </summary>
     /// <param name="modelPath">Path to the model directory.</param>
     /// <returns>The maximum context length, or default if not found.</returns>
@@ -29,8 +31,7 @@ internal static class GenAiConfigReader
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
 
-            // Try different possible locations for context length
-            // 1. model.context_length (common location)
+            // Priority 1: model.context_length (model architecture limit)
             if (root.TryGetProperty("model", out var modelSection))
             {
                 if (modelSection.TryGetProperty("context_length", out var ctxLen))
@@ -45,19 +46,26 @@ internal static class GenAiConfigReader
                 }
             }
 
-            // 2. search.max_length (GenAI specific)
+            // Priority 2: Direct context_length at root
+            if (root.TryGetProperty("context_length", out var rootCtxLen))
+            {
+                return rootCtxLen.GetInt32();
+            }
+
+            // Priority 3: search.max_length (GenAI default, often too small)
+            // Only use if >= 1024, otherwise it's likely a conservative default
             if (root.TryGetProperty("search", out var searchSection))
             {
                 if (searchSection.TryGetProperty("max_length", out var maxLen))
                 {
-                    return maxLen.GetInt32();
+                    var searchMaxLength = maxLen.GetInt32();
+                    if (searchMaxLength >= 1024)
+                    {
+                        return searchMaxLength;
+                    }
+                    // Ignore small search.max_length values (e.g., 512 default)
+                    // These are generation defaults, not model limits
                 }
-            }
-
-            // 3. Direct context_length at root
-            if (root.TryGetProperty("context_length", out var rootCtxLen))
-            {
-                return rootCtxLen.GetInt32();
             }
 
             return DefaultMaxContextLength;

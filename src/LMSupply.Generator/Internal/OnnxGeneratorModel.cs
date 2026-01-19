@@ -71,11 +71,28 @@ internal sealed class OnnxGeneratorModel : IGeneratorModel
         try
         {
             var sequences = _tokenizer.Encode(prompt);
-            using var generatorParams = CreateGeneratorParams(options);
+
+            // Use MaxContextLength as the upper bound for max_length
+            // This allows the model to use its full context capacity
+            var effectiveMaxLength = MaxContextLength;
+            using var generatorParams = CreateGeneratorParams(options, effectiveMaxLength);
 
             using var tokenizerStream = _tokenizer.CreateStream();
             using var generator = new OnnxGenerator(_model, generatorParams);
-            generator.AppendTokenSequences(sequences);
+
+            try
+            {
+                generator.AppendTokenSequences(sequences);
+            }
+            catch (Microsoft.ML.OnnxRuntimeGenAI.OnnxRuntimeGenAIException ex)
+                when (ex.Message.Contains("exceeds max length"))
+            {
+                // Parse token count from error message if possible
+                throw new InvalidOperationException(
+                    $"Input prompt exceeds model's maximum context length ({MaxContextLength} tokens). " +
+                    $"Please reduce the prompt length or use a model with larger context support. " +
+                    $"Original error: {ex.Message}", ex);
+            }
 
             var generatedTokenCount = 0;
             var maxNewTokens = options.MaxNewTokens ?? int.MaxValue;
@@ -187,11 +204,12 @@ internal sealed class OnnxGeneratorModel : IGeneratorModel
         _chatFormatter.FormatName,
         _resolvedProvider.ToString());
 
-    private GeneratorParams CreateGeneratorParams(GenerationOptions options)
+    private GeneratorParams CreateGeneratorParams(GenerationOptions options, int effectiveMaxLength)
     {
         var generatorParams = new GeneratorParams(_model);
 
-        generatorParams.SetSearchOption("max_length", options.MaxTokens);
+        // max_length includes both input and output tokens
+        generatorParams.SetSearchOption("max_length", effectiveMaxLength);
         generatorParams.SetSearchOption("temperature", options.Temperature);
         generatorParams.SetSearchOption("top_p", options.TopP);
         generatorParams.SetSearchOption("top_k", options.TopK);

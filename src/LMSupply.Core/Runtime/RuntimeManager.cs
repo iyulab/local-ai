@@ -234,20 +234,11 @@ public sealed class RuntimeManager : IAsyncDisposable
 
     /// <summary>
     /// Gets the best provider string for the current hardware.
+    /// Returns the first provider in the fallback chain.
     /// </summary>
     public string GetDefaultProvider()
     {
-        if (_gpu is null)
-            return "cpu";
-
-        return _gpu.Vendor switch
-        {
-            GpuVendor.Nvidia when _gpu.CudaDriverVersionMajor >= 12 => "cuda12",
-            GpuVendor.Nvidia when _gpu.CudaDriverVersionMajor >= 11 => "cuda11",
-            _ when _gpu.DirectMLSupported => "directml",
-            _ when _gpu.CoreMLSupported => "coreml",
-            _ => "cpu"
-        };
+        return GetProviderFallbackChain().First();
     }
 
     /// <summary>
