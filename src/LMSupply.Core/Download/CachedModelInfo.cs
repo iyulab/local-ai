@@ -54,4 +54,14 @@ public sealed record CachedModelInfo
     /// Returns true if the model appears to be completely downloaded.
     /// </summary>
     public bool IsComplete => SizeBytes >= MinimumCompleteSize;
+
+    /// <summary>
+    /// Optional metadata from HuggingFace Hub (populated if .metadata.json exists).
+    /// </summary>
+    public ModelMetadata? Metadata { get; init; }
+
+    /// <summary>
+    /// Returns true if HuggingFace metadata is available.
+    /// </summary>
+    public bool HasMetadata => Metadata is not null;
 }

@@ -219,6 +219,9 @@ public static class CacheManager
             // Detect model type
             var detectedType = DetectModelType(fileNames!, repoId);
 
+            // Try to load cached metadata
+            var metadata = TryLoadMetadata(modelDir);
+
             return new CachedModelInfo
             {
                 RepoId = repoId,
@@ -227,8 +230,30 @@ public static class CacheManager
                 FileCount = files.Length,
                 DetectedType = detectedType,
                 LastModified = Directory.GetLastWriteTime(latestSnapshot),
-                Files = fileNames!
+                Files = fileNames!,
+                Metadata = metadata
             };
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Tries to load cached metadata from .metadata.json file.
+    /// </summary>
+    private static ModelMetadata? TryLoadMetadata(string modelDir)
+    {
+        try
+        {
+            var metadataPath = Path.Combine(modelDir, ".metadata.json");
+            if (!File.Exists(metadataPath))
+                return null;
+
+            var json = File.ReadAllText(metadataPath);
+            return System.Text.Json.JsonSerializer.Deserialize<ModelMetadata>(json,
+                new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
         }
         catch
         {
