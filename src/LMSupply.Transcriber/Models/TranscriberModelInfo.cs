@@ -3,7 +3,7 @@ namespace LMSupply.Transcriber.Models;
 /// <summary>
 /// Information about a transcriber model configuration.
 /// </summary>
-public sealed class TranscriberModelInfo
+public sealed class TranscriberModelInfo : IModelInfoBase
 {
     /// <summary>
     /// Gets or sets the HuggingFace model ID.

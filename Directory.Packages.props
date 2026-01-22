@@ -9,7 +9,7 @@
     <!-- Core Dependencies -->
     <PackageVersion Include="Microsoft.ML.OnnxRuntime" Version="1.23.2" />
     <PackageVersion Include="Microsoft.ML.Tokenizers" Version="2.0.0" />
-    <PackageVersion Include="System.Numerics.Tensors" Version="10.0.1" />
+    <PackageVersion Include="System.Numerics.Tensors" Version="10.0.2" />
 
     <!-- Vision Dependencies -->
     <PackageVersion Include="SixLabors.ImageSharp" Version="3.1.12" />

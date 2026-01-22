@@ -18,13 +18,39 @@ internal sealed class OnnxInferenceEngine : IDisposable
 
     public int HiddenSize { get; }
 
-    private OnnxInferenceEngine(InferenceSession session, int hiddenSize, bool hasTokenTypeIds, string outputName, bool isGpuProvider)
+    /// <summary>
+    /// Gets whether GPU acceleration is being used for inference.
+    /// </summary>
+    public bool IsGpuActive { get; }
+
+    /// <summary>
+    /// Gets the list of active execution providers.
+    /// </summary>
+    public IReadOnlyList<string> ActiveProviders { get; }
+
+    /// <summary>
+    /// Gets the execution provider that was requested.
+    /// </summary>
+    public ExecutionProvider RequestedProvider { get; }
+
+    private OnnxInferenceEngine(
+        InferenceSession session,
+        int hiddenSize,
+        bool hasTokenTypeIds,
+        string outputName,
+        bool isGpuProvider,
+        bool isGpuActive,
+        IReadOnlyList<string> activeProviders,
+        ExecutionProvider requestedProvider)
     {
         _session = session;
         HiddenSize = hiddenSize;
         _hasTokenTypeIds = hasTokenTypeIds;
         _outputName = outputName;
         _isGpuProvider = isGpuProvider;
+        IsGpuActive = isGpuActive;
+        ActiveProviders = activeProviders;
+        RequestedProvider = requestedProvider;
     }
 
     /// <summary>
@@ -45,14 +71,14 @@ internal sealed class OnnxInferenceEngine : IDisposable
         if (!File.Exists(modelPath))
             throw new ModelNotFoundException("Model file not found", modelPath);
 
-        var session = await OnnxSessionFactory.CreateAsync(
+        var result = await OnnxSessionFactory.CreateWithInfoAsync(
             modelPath,
             provider,
             ConfigureOptions,
             progress,
             cancellationToken);
 
-        return CreateFromSession(session, IsGpuProvider(provider));
+        return CreateFromSessionResult(result);
     }
 
     /// <summary>
@@ -65,7 +91,13 @@ internal sealed class OnnxInferenceEngine : IDisposable
             throw new ModelNotFoundException("Model file not found", modelPath);
 
         var session = OnnxSessionFactory.Create(modelPath, provider, ConfigureOptions);
-        return CreateFromSession(session, IsGpuProvider(provider));
+        var activeProviders = OnnxSessionFactory.GetActiveProviders(session);
+        var isGpuActive = activeProviders.Any(p =>
+            p.Contains("CUDA", StringComparison.OrdinalIgnoreCase) ||
+            p.Contains("DML", StringComparison.OrdinalIgnoreCase) ||
+            p.Contains("CoreML", StringComparison.OrdinalIgnoreCase));
+
+        return CreateFromSession(session, IsGpuProvider(provider), isGpuActive, activeProviders, provider);
     }
 
     private static bool IsGpuProvider(ExecutionProvider provider)
@@ -86,7 +118,22 @@ internal sealed class OnnxInferenceEngine : IDisposable
         options.InterOpNumThreads = 1;
     }
 
-    private static OnnxInferenceEngine CreateFromSession(InferenceSession session, bool isGpuProvider)
+    private static OnnxInferenceEngine CreateFromSessionResult(SessionCreationResult result)
+    {
+        return CreateFromSession(
+            result.Session,
+            IsGpuProvider(result.RequestedProvider),
+            result.IsGpuActive,
+            result.ActiveProviders,
+            result.RequestedProvider);
+    }
+
+    private static OnnxInferenceEngine CreateFromSession(
+        InferenceSession session,
+        bool isGpuProvider,
+        bool isGpuActive,
+        IReadOnlyList<string> activeProviders,
+        ExecutionProvider requestedProvider)
     {
         // Detect model configuration from metadata
         var inputNames = session.InputMetadata.Keys.ToHashSet();
@@ -97,7 +144,15 @@ internal sealed class OnnxInferenceEngine : IDisposable
         string outputName = outputMeta.Key;
         int hiddenSize = (int)outputMeta.Value.Dimensions[^1]; // Last dimension is hidden size
 
-        return new OnnxInferenceEngine(session, hiddenSize, hasTokenTypeIds, outputName, isGpuProvider);
+        return new OnnxInferenceEngine(
+            session,
+            hiddenSize,
+            hasTokenTypeIds,
+            outputName,
+            isGpuProvider,
+            isGpuActive,
+            activeProviders,
+            requestedProvider);
     }
 
     /// <summary>

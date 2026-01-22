@@ -29,8 +29,15 @@ public record ModelInfo(
     int VocabSize,
     int BosTokenId,
     int EosTokenId,
-    int PadTokenId)
+    int PadTokenId) : IModelInfoBase
 {
+    /// <summary>
+    /// Gets the model description (derived from DisplayName).
+    /// </summary>
+    public string? Description => DisplayName;
+
+    // IModelInfoBase explicit implementation
+    string IModelInfoBase.Id => RepoId;
     /// <summary>
     /// Optional subfolder within the HuggingFace repository.
     /// </summary>

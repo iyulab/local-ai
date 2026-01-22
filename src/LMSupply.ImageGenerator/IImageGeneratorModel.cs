@@ -13,6 +13,12 @@ public interface IImageGeneratorModel : IAsyncDisposable
     string ModelId { get; }
 
     /// <summary>
+    /// Gets the estimated memory usage of this model in bytes.
+    /// Based on ONNX model file sizes with overhead factor.
+    /// </summary>
+    long? EstimatedMemoryBytes { get; }
+
+    /// <summary>
     /// Pre-loads the model to avoid cold start latency.
     /// </summary>
     /// <param name="cancellationToken">Cancellation token.</param>

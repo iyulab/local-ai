@@ -21,14 +21,35 @@ internal sealed class DbNetDetector : IDisposable
     private readonly string _outputName;
     private bool _disposed;
 
+    /// <summary>
+    /// Gets whether GPU acceleration is being used for inference.
+    /// </summary>
+    public bool IsGpuActive { get; }
+
+    /// <summary>
+    /// Gets the list of active execution providers.
+    /// </summary>
+    public IReadOnlyList<string> ActiveProviders { get; }
+
+    /// <summary>
+    /// Gets the execution provider that was requested.
+    /// </summary>
+    public ExecutionProvider RequestedProvider { get; }
+
     private DbNetDetector(
         InferenceSession session,
         DetectionModelInfo modelInfo,
-        OcrOptions options)
+        OcrOptions options,
+        bool isGpuActive,
+        IReadOnlyList<string> activeProviders,
+        ExecutionProvider requestedProvider)
     {
         _session = session;
         _modelInfo = modelInfo;
         _postProcessor = new DbNetPostProcessor(options);
+        IsGpuActive = isGpuActive;
+        ActiveProviders = activeProviders;
+        RequestedProvider = requestedProvider;
 
         // Get input/output names from the model
         _inputName = session.InputNames.First();
@@ -43,10 +64,16 @@ internal sealed class DbNetDetector : IDisposable
         DetectionModelInfo modelInfo,
         OcrOptions options)
     {
-        var session = await OnnxSessionFactory.CreateAsync(modelPath, options.Provider)
+        var result = await OnnxSessionFactory.CreateWithInfoAsync(modelPath, options.Provider)
             .ConfigureAwait(false);
 
-        return new DbNetDetector(session, modelInfo, options);
+        return new DbNetDetector(
+            result.Session,
+            modelInfo,
+            options,
+            result.IsGpuActive,
+            result.ActiveProviders,
+            result.RequestedProvider);
     }
 
     /// <summary>

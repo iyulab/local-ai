@@ -58,6 +58,26 @@ internal sealed class OnnxGeneratorModel : IGeneratorModel
     public IChatFormatter ChatFormatter => _chatFormatter;
 
     /// <inheritdoc />
+    public bool IsGpuActive => _resolvedProvider is not ExecutionProvider.Cpu;
+
+    /// <inheritdoc />
+    public IReadOnlyList<string> ActiveProviders => _resolvedProvider switch
+    {
+        ExecutionProvider.Cuda => new[] { "CUDAExecutionProvider", "CPUExecutionProvider" },
+        ExecutionProvider.DirectML => new[] { "DmlExecutionProvider", "CPUExecutionProvider" },
+        ExecutionProvider.CoreML => new[] { "CoreMLExecutionProvider", "CPUExecutionProvider" },
+        _ => new[] { "CPUExecutionProvider" }
+    };
+
+    /// <inheritdoc />
+    public ExecutionProvider RequestedProvider => _options.Provider;
+
+    /// <inheritdoc />
+    public long? EstimatedMemoryBytes => Directory.Exists(_modelPath)
+        ? Directory.GetFiles(_modelPath, "*.onnx").Sum(f => new FileInfo(f).Length) * 2
+        : null;
+
+    /// <inheritdoc />
     public async IAsyncEnumerable<string> GenerateAsync(
         string prompt,
         GenerationOptions? options = null,

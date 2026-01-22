@@ -29,8 +29,24 @@ public sealed class Reranker : IRerankerModel
     private readonly SemaphoreSlim _initLock = new(1, 1);
     private bool _disposed;
 
+    // Runtime diagnostics
+    private bool _isGpuActive;
+    private IReadOnlyList<string> _activeProviders = Array.Empty<string>();
+
     /// <inheritdoc />
     public string ModelId => _options.ModelId;
+
+    /// <inheritdoc />
+    public bool IsGpuActive => _isGpuActive;
+
+    /// <inheritdoc />
+    public IReadOnlyList<string> ActiveProviders => _activeProviders;
+
+    /// <inheritdoc />
+    public ExecutionProvider RequestedProvider => _options.Provider;
+
+    /// <inheritdoc />
+    public long? EstimatedMemoryBytes => GetModelInfo()?.SizeBytes * 2;
 
     /// <summary>
     /// Initializes a new Reranker with default settings.
@@ -196,6 +212,10 @@ public sealed class Reranker : IRerankerModel
                 modelInfo,
                 _options.Provider,
                 _options.ThreadCount);
+
+            // Store runtime diagnostics
+            _isGpuActive = inference.IsGpuActive;
+            _activeProviders = inference.ActiveProviders;
 
             return new RerankerState(modelInfo, tokenizer, inference);
         }

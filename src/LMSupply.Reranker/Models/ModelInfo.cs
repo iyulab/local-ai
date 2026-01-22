@@ -3,7 +3,7 @@ namespace LMSupply.Reranker.Models;
 /// <summary>
 /// Contains metadata and configuration for a reranker model.
 /// </summary>
-public sealed record ModelInfo
+public sealed record ModelInfo : IModelInfoBase
 {
     /// <summary>
     /// Gets the unique identifier for the model (e.g., "cross-encoder/ms-marco-MiniLM-L-6-v2").

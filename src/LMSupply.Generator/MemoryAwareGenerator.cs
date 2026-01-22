@@ -83,6 +83,18 @@ public sealed class MemoryAwareGenerator : IGeneratorModel
     public IChatFormatter ChatFormatter => _inner.ChatFormatter;
 
     /// <inheritdoc />
+    public bool IsGpuActive => _inner.IsGpuActive;
+
+    /// <inheritdoc />
+    public IReadOnlyList<string> ActiveProviders => _inner.ActiveProviders;
+
+    /// <inheritdoc />
+    public ExecutionProvider RequestedProvider => _inner.RequestedProvider;
+
+    /// <inheritdoc />
+    public long? EstimatedMemoryBytes => _inner.EstimatedMemoryBytes;
+
+    /// <inheritdoc />
     public async IAsyncEnumerable<string> GenerateAsync(
         string prompt,
         GenerationOptions? options = null,

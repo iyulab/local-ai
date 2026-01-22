@@ -30,6 +30,18 @@ internal sealed class OcrPipeline : IOcr
         _recognitionModel = recognitionModel;
     }
 
+    /// <inheritdoc />
+    public bool IsGpuActive => _detector.IsGpuActive;
+
+    /// <inheritdoc />
+    public IReadOnlyList<string> ActiveProviders => _detector.ActiveProviders;
+
+    /// <inheritdoc />
+    public ExecutionProvider RequestedProvider => _detector.RequestedProvider;
+
+    /// <inheritdoc />
+    public long? EstimatedMemoryBytes => null; // OCR uses two models; size estimation not available without model paths
+
     /// <summary>
     /// Creates a new OCR pipeline instance.
     /// </summary>

@@ -21,8 +21,24 @@ internal sealed class OnnxSynthesizerModel : ISynthesizerModel
     private bool _isInitialized;
     private bool _isDisposed;
 
+    // Runtime diagnostics
+    private bool _isGpuActive;
+    private IReadOnlyList<string> _activeProviders = Array.Empty<string>();
+
     /// <inheritdoc />
     public string ModelId => _modelInfo?.Id ?? _options.ModelId;
+
+    /// <inheritdoc />
+    public bool IsGpuActive => _isGpuActive;
+
+    /// <inheritdoc />
+    public IReadOnlyList<string> ActiveProviders => _activeProviders;
+
+    /// <inheritdoc />
+    public ExecutionProvider RequestedProvider => _options.Provider;
+
+    /// <inheritdoc />
+    public long? EstimatedMemoryBytes => _modelInfo?.SizeBytes * 2;
 
     public string? Voice => _modelInfo?.VoiceName;
     public int SampleRate => _config?.Audio?.SampleRate ?? 22050;
@@ -264,11 +280,15 @@ internal sealed class OnnxSynthesizerModel : ISynthesizerModel
                 throw new FileNotFoundException($"Model file not found: {modelFilePath}");
             }
 
-            _session = await OnnxSessionFactory.CreateAsync(
+            var result = await OnnxSessionFactory.CreateWithInfoAsync(
                 modelFilePath,
                 _options.Provider,
                 ConfigureSessionOptions,
                 cancellationToken: cancellationToken);
+
+            _session = result.Session;
+            _isGpuActive = result.IsGpuActive;
+            _activeProviders = result.ActiveProviders;
 
             _isInitialized = true;
         }

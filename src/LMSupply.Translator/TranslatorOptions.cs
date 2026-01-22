@@ -25,12 +25,6 @@ public sealed class TranslatorOptions : LMSupplyOptionsBase
     public bool DisableAutoDownload { get; set; }
 
     /// <summary>
-    /// Gets or sets the number of inference threads.
-    /// <para>Default: null (uses Environment.ProcessorCount)</para>
-    /// </summary>
-    public int? ThreadCount { get; set; }
-
-    /// <summary>
     /// Gets or sets the maximum length of generated text.
     /// <para>Default: 512</para>
     /// </summary>

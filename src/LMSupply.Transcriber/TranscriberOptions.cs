@@ -25,12 +25,6 @@ public sealed class TranscriberOptions : LMSupplyOptionsBase
     public bool DisableAutoDownload { get; set; }
 
     /// <summary>
-    /// Gets or sets the number of inference threads.
-    /// <para>Default: null (uses Environment.ProcessorCount)</para>
-    /// </summary>
-    public int? ThreadCount { get; set; }
-
-    /// <summary>
     /// Creates a copy of these options.
     /// </summary>
     public TranscriberOptions Clone() => new()

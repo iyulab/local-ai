@@ -3,7 +3,7 @@ namespace LMSupply.Synthesizer.Models;
 /// <summary>
 /// Information about a TTS model configuration.
 /// </summary>
-public sealed record SynthesizerModelInfo
+public sealed record SynthesizerModelInfo : IModelInfoBase
 {
     /// <summary>
     /// Gets the HuggingFace model ID or local path.

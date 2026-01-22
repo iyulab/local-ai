@@ -25,12 +25,6 @@ public sealed class SegmenterOptions : LMSupplyOptionsBase
     public bool DisableAutoDownload { get; set; }
 
     /// <summary>
-    /// Gets or sets the number of inference threads.
-    /// <para>Default: null (uses Environment.ProcessorCount)</para>
-    /// </summary>
-    public int? ThreadCount { get; set; }
-
-    /// <summary>
     /// Gets or sets whether to resize output to match original image dimensions.
     /// <para>Default: true</para>
     /// </summary>

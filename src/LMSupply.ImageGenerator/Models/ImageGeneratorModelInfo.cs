@@ -5,17 +5,26 @@ namespace LMSupply.ImageGenerator.Models;
 /// <summary>
 /// Information about a loaded image generator model.
 /// </summary>
-public sealed class ImageGeneratorModelInfo
+public sealed class ImageGeneratorModelInfo : IModelInfoBase
 {
     /// <summary>
     /// Model identifier (HuggingFace repo ID or local path).
     /// </summary>
     public required string ModelId { get; init; }
 
+    // IModelInfoBase explicit implementation
+    string IModelInfoBase.Id => ModelId;
+    string IModelInfoBase.Alias => ModelName ?? ModelId;
+
     /// <summary>
     /// Friendly name of the model.
     /// </summary>
     public string? ModelName { get; init; }
+
+    /// <summary>
+    /// Gets the model description.
+    /// </summary>
+    public string? Description => $"{Architecture} image generator";
 
     /// <summary>
     /// Model architecture type.

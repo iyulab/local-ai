@@ -7,12 +7,22 @@ namespace LMSupply.Ocr.Models;
 /// <param name="RecognitionModel">Information about the text recognition model.</param>
 public record OcrModelInfo(
     DetectionModelInfo DetectionModel,
-    RecognitionModelInfo RecognitionModel)
+    RecognitionModelInfo RecognitionModel) : IModelInfoBase
 {
     /// <summary>
-    /// Gets a combined model identifier.
+    /// Gets the combined model identifier.
     /// </summary>
-    public string ModelId => $"{DetectionModel.Alias}+{RecognitionModel.Alias}";
+    public string Id => $"{DetectionModel.Alias}+{RecognitionModel.Alias}";
+
+    /// <summary>
+    /// Gets the alias for this OCR pipeline configuration.
+    /// </summary>
+    public string Alias => Id;
+
+    /// <summary>
+    /// Gets the description.
+    /// </summary>
+    public string? Description => $"OCR pipeline: {DetectionModel.DisplayName} + {RecognitionModel.DisplayName}";
 
     /// <summary>
     /// Gets the supported language codes from the recognition model.

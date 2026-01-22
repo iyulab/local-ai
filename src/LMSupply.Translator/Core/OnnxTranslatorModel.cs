@@ -30,8 +30,24 @@ internal sealed class OnnxTranslatorModel : ITranslatorModel
     private string? _resolvedEncoderFile;
     private string? _resolvedDecoderFile;
 
+    // Runtime diagnostics
+    private bool _isGpuActive;
+    private IReadOnlyList<string> _activeProviders = Array.Empty<string>();
+
     /// <inheritdoc />
     public string ModelId => _modelInfo.Id;
+
+    /// <inheritdoc />
+    public bool IsGpuActive => _isGpuActive;
+
+    /// <inheritdoc />
+    public IReadOnlyList<string> ActiveProviders => _activeProviders;
+
+    /// <inheritdoc />
+    public ExecutionProvider RequestedProvider => _options.Provider;
+
+    /// <inheritdoc />
+    public long? EstimatedMemoryBytes => _modelInfo.SizeBytes * 2;
 
     /// <summary>
     /// Gets the source language code.
@@ -294,11 +310,15 @@ internal sealed class OnnxTranslatorModel : ITranslatorModel
 
             // Load encoder
             var encoderPath = Path.Combine(modelDir, encoderFile);
-            _encoderSession = await OnnxSessionFactory.CreateAsync(
+            var encoderResult = await OnnxSessionFactory.CreateWithInfoAsync(
                 encoderPath,
                 _options.Provider,
                 ConfigureSessionOptions,
                 cancellationToken: cancellationToken);
+
+            _encoderSession = encoderResult.Session;
+            _isGpuActive = encoderResult.IsGpuActive;
+            _activeProviders = encoderResult.ActiveProviders;
 
             // Load decoder
             var decoderPath = Path.Combine(modelDir, decoderFile);

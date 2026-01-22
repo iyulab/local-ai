@@ -20,6 +20,10 @@ internal sealed class OnnxImageGeneratorModel : IImageGeneratorModel
 
     public string ModelId => _modelDefinition.RepoId;
 
+    public long? EstimatedMemoryBytes => Directory.Exists(_modelPath)
+        ? Directory.GetFiles(_modelPath, "*.onnx", SearchOption.AllDirectories).Sum(f => new FileInfo(f).Length) * 2
+        : null;
+
     private OnnxImageGeneratorModel(
         LcmPipeline pipeline,
         ModelDefinition modelDefinition,

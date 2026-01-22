@@ -19,6 +19,9 @@ internal sealed class VitGpt2Captioner : ICaptionerModel
     private readonly ModelInfo _modelInfo;
     private readonly CaptionerOptions _options;
     private readonly ImagePreprocessor _preprocessor;
+    private readonly bool _isGpuActive;
+    private readonly IReadOnlyList<string> _activeProviders;
+    private readonly ExecutionProvider _requestedProvider;
     private bool _disposed;
 
     private VitGpt2Captioner(
@@ -26,7 +29,10 @@ internal sealed class VitGpt2Captioner : ICaptionerModel
         InferenceSession decoder,
         ITextTokenizer tokenizer,
         ModelInfo modelInfo,
-        CaptionerOptions options)
+        CaptionerOptions options,
+        bool isGpuActive,
+        IReadOnlyList<string> activeProviders,
+        ExecutionProvider requestedProvider)
     {
         _encoder = encoder;
         _decoder = decoder;
@@ -34,10 +40,25 @@ internal sealed class VitGpt2Captioner : ICaptionerModel
         _modelInfo = modelInfo;
         _options = options;
         _preprocessor = ImagePreprocessor.Instance;
+        _isGpuActive = isGpuActive;
+        _activeProviders = activeProviders;
+        _requestedProvider = requestedProvider;
     }
 
     /// <inheritdoc />
     public string ModelId => _modelInfo.Alias;
+
+    /// <inheritdoc />
+    public bool IsGpuActive => _isGpuActive;
+
+    /// <inheritdoc />
+    public IReadOnlyList<string> ActiveProviders => _activeProviders;
+
+    /// <inheritdoc />
+    public ExecutionProvider RequestedProvider => _requestedProvider;
+
+    /// <inheritdoc />
+    public long? EstimatedMemoryBytes => null; // Model size info not available without path tracking
 
     /// <inheritdoc />
     public bool SupportsVqa => _modelInfo.SupportsVqa;
@@ -75,13 +96,21 @@ internal sealed class VitGpt2Captioner : ICaptionerModel
             throw new ModelNotFoundException($"Decoder file not found: {decoderPath}", modelInfo.Alias);
 
         // Load ONNX sessions
-        var encoder = await OnnxSessionFactory.CreateAsync(encoderPath, options.Provider).ConfigureAwait(false);
+        var encoderResult = await OnnxSessionFactory.CreateWithInfoAsync(encoderPath, options.Provider).ConfigureAwait(false);
         var decoder = await OnnxSessionFactory.CreateAsync(decoderPath, options.Provider).ConfigureAwait(false);
 
         // Load tokenizer from Text.Core - tokenizer files may be in a different directory (e.g., base dir for HuggingFace repos)
         var tokenizer = Text.TokenizerFactory.CreateGpt2(tokenizerDir ?? modelDir);
 
-        return new VitGpt2Captioner(encoder, decoder, tokenizer, modelInfo, options);
+        return new VitGpt2Captioner(
+            encoderResult.Session,
+            decoder,
+            tokenizer,
+            modelInfo,
+            options,
+            encoderResult.IsGpuActive,
+            encoderResult.ActiveProviders,
+            encoderResult.RequestedProvider);
     }
 
     /// <inheritdoc />

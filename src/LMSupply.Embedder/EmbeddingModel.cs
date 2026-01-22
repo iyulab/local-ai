@@ -22,6 +22,18 @@ internal sealed class EmbeddingModel : IEmbeddingModel
     public string ModelId { get; }
     public int Dimensions => _engine.HiddenSize;
 
+    /// <inheritdoc />
+    public long? EstimatedMemoryBytes => null; // TODO: Implement when ModelInfo has FileSizeBytes
+
+    /// <inheritdoc />
+    public bool IsGpuActive => _engine.IsGpuActive;
+
+    /// <inheritdoc />
+    public IReadOnlyList<string> ActiveProviders => _engine.ActiveProviders;
+
+    /// <inheritdoc />
+    public ExecutionProvider RequestedProvider => _engine.RequestedProvider;
+
     internal EmbeddingModel(
         string modelId,
         OnnxInferenceEngine engine,

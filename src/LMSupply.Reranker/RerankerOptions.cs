@@ -32,12 +32,6 @@ public sealed class RerankerOptions : LMSupplyOptionsBase
     public bool DisableAutoDownload { get; set; } = false;
 
     /// <summary>
-    /// Gets or sets the number of inference threads.
-    /// <para>Default: null (uses Environment.ProcessorCount)</para>
-    /// </summary>
-    public int? ThreadCount { get; set; }
-
-    /// <summary>
     /// Gets or sets the batch size for processing multiple documents.
     /// Larger values are faster but use more memory.
     /// <para>Default: 32</para>

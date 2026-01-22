@@ -3,7 +3,7 @@ namespace LMSupply.Detector.Models;
 /// <summary>
 /// Metadata about a detector model.
 /// </summary>
-public sealed class DetectorModelInfo
+public sealed class DetectorModelInfo : IModelInfoBase
 {
     /// <summary>
     /// Gets or sets the model ID (HuggingFace repo ID or local path).

@@ -16,6 +16,27 @@ public interface IGeneratorModel : ITextGenerator
     IChatFormatter ChatFormatter { get; }
 
     /// <summary>
+    /// Gets whether GPU acceleration is being used for inference.
+    /// </summary>
+    bool IsGpuActive { get; }
+
+    /// <summary>
+    /// Gets the list of active execution providers.
+    /// </summary>
+    IReadOnlyList<string> ActiveProviders { get; }
+
+    /// <summary>
+    /// Gets the execution provider that was requested.
+    /// </summary>
+    ExecutionProvider RequestedProvider { get; }
+
+    /// <summary>
+    /// Gets the estimated memory usage of this model in bytes.
+    /// Uses MemoryEstimator to calculate based on model parameters, context length, and quantization.
+    /// </summary>
+    long? EstimatedMemoryBytes { get; }
+
+    /// <summary>
     /// Gets information about the model.
     /// </summary>
     GeneratorModelInfo GetModelInfo();
@@ -34,4 +55,20 @@ public readonly record struct GeneratorModelInfo(
     string ModelPath,
     int MaxContextLength,
     string ChatFormat,
-    string ExecutionProvider);
+    string ExecutionProvider) : IModelInfoBase
+{
+    /// <summary>
+    /// Gets the model identifier (IModelInfoBase.Id).
+    /// </summary>
+    string IModelInfoBase.Id => ModelId;
+
+    /// <summary>
+    /// Gets the model alias (same as ModelId for Generator).
+    /// </summary>
+    string IModelInfoBase.Alias => ModelId;
+
+    /// <summary>
+    /// Gets the model description.
+    /// </summary>
+    string? IModelInfoBase.Description => $"{ChatFormat} model at {ModelPath}";
+}

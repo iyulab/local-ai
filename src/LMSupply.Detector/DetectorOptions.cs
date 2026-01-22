@@ -45,12 +45,6 @@ public sealed class DetectorOptions : LMSupplyOptionsBase
     public bool DisableAutoDownload { get; set; }
 
     /// <summary>
-    /// Gets or sets the number of inference threads.
-    /// <para>Default: null (uses Environment.ProcessorCount)</para>
-    /// </summary>
-    public int? ThreadCount { get; set; }
-
-    /// <summary>
     /// Gets or sets class labels to filter. If null or empty, all classes are returned.
     /// <para>Default: null (return all classes)</para>
     /// </summary>

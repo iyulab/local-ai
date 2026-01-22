@@ -13,6 +13,27 @@ public interface ITranslatorModel : IAsyncDisposable
     string ModelId { get; }
 
     /// <summary>
+    /// Gets whether GPU acceleration is being used for inference.
+    /// </summary>
+    bool IsGpuActive { get; }
+
+    /// <summary>
+    /// Gets the list of active execution providers.
+    /// </summary>
+    IReadOnlyList<string> ActiveProviders { get; }
+
+    /// <summary>
+    /// Gets the execution provider that was requested.
+    /// </summary>
+    ExecutionProvider RequestedProvider { get; }
+
+    /// <summary>
+    /// Gets the estimated memory usage of this model in bytes.
+    /// Based on ONNX model file size with overhead factor.
+    /// </summary>
+    long? EstimatedMemoryBytes { get; }
+
+    /// <summary>
     /// Gets the source language code.
     /// </summary>
     string SourceLanguage { get; }

@@ -5,7 +5,7 @@ namespace LMSupply.Translator.Models;
 /// <summary>
 /// Information about a translation model.
 /// </summary>
-public sealed class TranslatorModelInfo
+public sealed class TranslatorModelInfo : IModelInfoBase
 {
     /// <summary>
     /// Gets or sets the model identifier (HuggingFace repo or local path).

@@ -1,3 +1,5 @@
+using LMSupply.Hardware;
+
 namespace LMSupply.Embedder.Utils;
 
 /// <summary>
@@ -196,28 +198,110 @@ internal static class ModelRegistry
 
     /// <summary>
     /// Tries to get model info by model ID.
+    /// Supports "auto" alias which selects optimal model based on hardware.
     /// </summary>
     public static bool TryGetModel(string modelId, out ModelInfo? info)
     {
-        return _models.TryGetValue(modelId, out info);
+        if (modelId.Equals("auto", StringComparison.OrdinalIgnoreCase))
+        {
+            info = GetAutoModel() with { Alias = "auto" };
+            return true;
+        }
+
+        if (_models.TryGetValue(modelId, out info))
+        {
+            info = info with { Alias = modelId };
+            return true;
+        }
+
+        return false;
     }
 
     /// <summary>
-    /// Gets all available model IDs.
+    /// Gets the optimal model based on current hardware profile.
+    /// Uses PerformanceTier to select appropriate model size.
     /// </summary>
-    public static IEnumerable<string> GetAvailableModels() => _models.Keys;
+    /// <remarks>
+    /// Tier mapping:
+    /// - Low:    bge-small-en-v1.5 (33M params, 384 dims) - lightweight
+    /// - Medium: bge-base-en-v1.5 (110M params, 768 dims) - balanced
+    /// - High:   gte-large-en-v1.5 (434M params, 1024 dims, 8K context) - quality
+    /// - Ultra:  gte-large-en-v1.5 (434M params, 1024 dims, 8K context) - quality
+    /// </remarks>
+    public static ModelInfo GetAutoModel()
+    {
+        var tier = HardwareProfile.Current.Tier;
+
+        return tier switch
+        {
+            PerformanceTier.Ultra or PerformanceTier.High
+                => _models["gte-large-en-v1.5"],
+            PerformanceTier.Medium
+                => _models["bge-base-en-v1.5"],
+            _
+                => _models["bge-small-en-v1.5"]
+        };
+    }
+
+    /// <summary>
+    /// Gets all available model IDs including "auto".
+    /// </summary>
+    public static IEnumerable<string> GetAvailableModels()
+    {
+        yield return "auto";
+        foreach (var key in _models.Keys)
+        {
+            yield return key;
+        }
+    }
 }
 
 /// <summary>
 /// Configuration information for a pre-configured model.
 /// </summary>
-public sealed record ModelInfo
+public sealed record ModelInfo : IModelInfoBase
 {
+    /// <summary>
+    /// Gets the unique identifier for this model (HuggingFace repository ID).
+    /// </summary>
     public required string RepoId { get; init; }
+
+    /// <summary>
+    /// Gets the user-friendly alias for this model (e.g., "default", "fast").
+    /// Set internally by the registry when resolving.
+    /// </summary>
+    public string Alias { get; internal init; } = string.Empty;
+
+    /// <summary>
+    /// Gets the embedding dimensions.
+    /// </summary>
     public required int Dimensions { get; init; }
+
+    /// <summary>
+    /// Gets the maximum input sequence length.
+    /// </summary>
     public required int MaxSequenceLength { get; init; }
+
+    /// <summary>
+    /// Gets the pooling mode for generating embeddings.
+    /// </summary>
     public required PoolingMode PoolingMode { get; init; }
+
+    /// <summary>
+    /// Gets whether to lowercase input text.
+    /// </summary>
     public required bool DoLowerCase { get; init; }
+
+    /// <summary>
+    /// Gets the model description.
+    /// </summary>
     public string? Description { get; init; }
+
+    /// <summary>
+    /// Gets the subfolder within the HuggingFace repository.
+    /// </summary>
     public string? Subfolder { get; init; }
+
+    // IModelInfoBase implementation
+    string IModelInfoBase.Id => RepoId;
 }

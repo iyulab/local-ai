@@ -49,6 +49,9 @@ internal sealed class OnnxTranscriberModel : ITranscriberModel
     /// </summary>
     public ExecutionProvider RequestedProvider => _encoderSessionInfo?.RequestedProvider ?? ExecutionProvider.Auto;
 
+    /// <inheritdoc />
+    public long? EstimatedMemoryBytes => _modelInfo?.SizeBytes * 2;
+
     public OnnxTranscriberModel(TranscriberOptions options)
     {
         _options = options.Clone();

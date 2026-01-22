@@ -1,3 +1,5 @@
+using LMSupply.Hardware;
+
 namespace LMSupply.Detector.Models;
 
 /// <summary>
@@ -34,12 +36,19 @@ public sealed class DetectorModelRegistry
 
     /// <summary>
     /// Resolves a model identifier to its full information.
+    /// Supports "auto" alias which selects optimal model based on hardware.
     /// </summary>
-    /// <param name="modelIdOrAlias">Model ID, alias, or local path.</param>
+    /// <param name="modelIdOrAlias">Model ID, alias, local path, or "auto".</param>
     /// <returns>The model information.</returns>
     public DetectorModelInfo Resolve(string modelIdOrAlias)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(modelIdOrAlias);
+
+        // Handle "auto" alias - select optimal model based on hardware
+        if (modelIdOrAlias.Equals("auto", StringComparison.OrdinalIgnoreCase))
+        {
+            return GetAutoModel();
+        }
 
         // Check if it's a local path
         if (IsLocalPath(modelIdOrAlias))
@@ -66,9 +75,33 @@ public sealed class DetectorModelRegistry
         }
 
         throw new ModelNotFoundException(
-            $"Model '{modelIdOrAlias}' not found. Use a built-in alias (default, quality, fast, large), " +
+            $"Model '{modelIdOrAlias}' not found. Use a built-in alias (default, quality, fast, large, auto), " +
             "a HuggingFace model ID (org/model), or a local file path.",
             modelIdOrAlias);
+    }
+
+    /// <summary>
+    /// Gets the optimal model based on current hardware profile.
+    /// Uses PerformanceTier to select appropriate model size.
+    /// </summary>
+    /// <remarks>
+    /// Tier mapping:
+    /// - Low:    EfficientDet-D0 (3.9M params) - fast, lightweight
+    /// - Medium: RT-DETR R18 (20M params) - balanced
+    /// - High:   RT-DETR R50 (42M params) - quality
+    /// - Ultra:  RT-DETR R101 (76M params) - highest accuracy
+    /// </remarks>
+    public static DetectorModelInfo GetAutoModel()
+    {
+        var tier = HardwareProfile.Current.Tier;
+
+        return tier switch
+        {
+            PerformanceTier.Ultra => DefaultModels.RtDetrR101,
+            PerformanceTier.High => DefaultModels.RtDetrR50,
+            PerformanceTier.Medium => DefaultModels.RtDetrR18,
+            _ => DefaultModels.EfficientDetD0
+        };
     }
 
     /// <summary>
@@ -97,9 +130,16 @@ public sealed class DetectorModelRegistry
     public IEnumerable<DetectorModelInfo> GetAll() => _modelsById.Values;
 
     /// <summary>
-    /// Gets all available aliases.
+    /// Gets all available aliases including "auto".
     /// </summary>
-    public IEnumerable<string> GetAliases() => _modelsByAlias.Keys;
+    public IEnumerable<string> GetAliases()
+    {
+        yield return "auto";
+        foreach (var alias in _modelsByAlias.Keys)
+        {
+            yield return alias;
+        }
+    }
 
     private static bool IsLocalPath(string path)
     {

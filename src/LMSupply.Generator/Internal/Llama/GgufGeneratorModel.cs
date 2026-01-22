@@ -142,6 +142,20 @@ internal sealed class GgufGeneratorModel : IGeneratorModel
     public IChatFormatter ChatFormatter => _chatFormatter;
 
     /// <inheritdoc />
+    public bool IsGpuActive => CalculateGpuLayers(_options.Provider) != 0;
+
+    /// <inheritdoc />
+    public IReadOnlyList<string> ActiveProviders => IsGpuActive
+        ? new[] { "LLamaSharpGPU", "CPU" }
+        : new[] { "CPU" };
+
+    /// <inheritdoc />
+    public ExecutionProvider RequestedProvider => _options.Provider;
+
+    /// <inheritdoc />
+    public long? EstimatedMemoryBytes => File.Exists(_modelPath) ? new FileInfo(_modelPath).Length * 2 : null;
+
+    /// <inheritdoc />
     public async IAsyncEnumerable<string> GenerateAsync(
         string prompt,
         GenerationOptions? options = null,

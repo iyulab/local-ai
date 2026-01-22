@@ -18,6 +18,7 @@ internal sealed class GgufEmbeddingModel : IEmbeddingModel
     private readonly LLamaEmbedder _embedder;
     private readonly EmbedderOptions _options;
     private readonly string _modelPath;
+    private readonly bool _isGpuActive;
     private bool _disposed;
 
     private GgufEmbeddingModel(
@@ -26,7 +27,8 @@ internal sealed class GgufEmbeddingModel : IEmbeddingModel
         LLamaWeights weights,
         LLamaEmbedder embedder,
         int dimensions,
-        EmbedderOptions options)
+        EmbedderOptions options,
+        bool isGpuActive)
     {
         ModelId = modelId;
         _modelPath = modelPath;
@@ -34,6 +36,7 @@ internal sealed class GgufEmbeddingModel : IEmbeddingModel
         _embedder = embedder;
         Dimensions = dimensions;
         _options = options;
+        _isGpuActive = isGpuActive;
     }
 
     /// <summary>
@@ -111,13 +114,17 @@ internal sealed class GgufEmbeddingModel : IEmbeddingModel
             TotalBytes = 100
         });
 
+        // Determine if GPU is active based on GPU layer count
+        var isGpuActive = CalculateGpuLayers(options.Provider) != 0;
+
         return new GgufEmbeddingModel(
             modelId,
             modelPath,
             weights,
             embedder,
             dimensions,
-            options);
+            options,
+            isGpuActive);
     }
 
     /// <inheritdoc />
@@ -125,6 +132,20 @@ internal sealed class GgufEmbeddingModel : IEmbeddingModel
 
     /// <inheritdoc />
     public int Dimensions { get; }
+
+    /// <inheritdoc />
+    public long? EstimatedMemoryBytes => File.Exists(_modelPath) ? new FileInfo(_modelPath).Length * 2 : null;
+
+    /// <inheritdoc />
+    public bool IsGpuActive => _isGpuActive;
+
+    /// <inheritdoc />
+    public IReadOnlyList<string> ActiveProviders => _isGpuActive
+        ? new[] { "LLamaSharpGPU", "CPU" }
+        : new[] { "CPU" };
+
+    /// <inheritdoc />
+    public ExecutionProvider RequestedProvider => _options.Provider;
 
     /// <inheritdoc />
     public async ValueTask<float[]> EmbedAsync(string text, CancellationToken cancellationToken = default)

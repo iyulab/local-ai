@@ -3,7 +3,7 @@ namespace LMSupply.Generator.Internal.Llama;
 /// <summary>
 /// Metadata for a registered GGUF model.
 /// </summary>
-public sealed record GgufModelInfo
+public sealed record GgufModelInfo : IModelInfoBase
 {
     /// <summary>
     /// HuggingFace repository ID (e.g., "bartowski/Llama-3.2-3B-Instruct-GGUF").
@@ -11,9 +11,22 @@ public sealed record GgufModelInfo
     public required string RepoId { get; init; }
 
     /// <summary>
+    /// Short alias for this model (set by registry).
+    /// </summary>
+    public string Alias { get; internal init; } = string.Empty;
+
+    /// <summary>
     /// Human-friendly display name.
     /// </summary>
     public required string DisplayName { get; init; }
+
+    /// <summary>
+    /// Gets the model description.
+    /// </summary>
+    public string? Description => DisplayName;
+
+    // IModelInfoBase explicit implementation
+    string IModelInfoBase.Id => RepoId;
 
     /// <summary>
     /// Default GGUF file name to download if not specified.

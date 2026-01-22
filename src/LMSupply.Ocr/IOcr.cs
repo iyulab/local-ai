@@ -1,3 +1,4 @@
+using LMSupply.Core;
 using LMSupply.Ocr.Models;
 
 namespace LMSupply.Ocr;
@@ -16,6 +17,27 @@ public interface IOcr : IAsyncDisposable
     /// Gets the recognition model identifier.
     /// </summary>
     string RecognitionModelId { get; }
+
+    /// <summary>
+    /// Gets whether GPU acceleration is being used for inference.
+    /// </summary>
+    bool IsGpuActive { get; }
+
+    /// <summary>
+    /// Gets the list of active execution providers.
+    /// </summary>
+    IReadOnlyList<string> ActiveProviders { get; }
+
+    /// <summary>
+    /// Gets the execution provider that was requested.
+    /// </summary>
+    ExecutionProvider RequestedProvider { get; }
+
+    /// <summary>
+    /// Gets the estimated memory usage of this model in bytes.
+    /// Based on combined ONNX model file sizes with overhead factor.
+    /// </summary>
+    long? EstimatedMemoryBytes { get; }
 
     /// <summary>
     /// Gets the supported language codes for recognition.

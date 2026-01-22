@@ -3,7 +3,7 @@ namespace LMSupply.Segmenter.Models;
 /// <summary>
 /// Information about a segmentation model.
 /// </summary>
-public sealed class SegmenterModelInfo
+public sealed class SegmenterModelInfo : IModelInfoBase
 {
     /// <summary>
     /// Gets or sets the model identifier (HuggingFace repo or local path).

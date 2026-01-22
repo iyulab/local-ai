@@ -13,13 +13,6 @@ public sealed class SynthesizerOptions : LMSupplyOptionsBase
     public string ModelId { get; set; } = "default";
 
     /// <summary>
-    /// Gets or sets the number of threads for CPU inference.
-    /// If null, uses ONNX Runtime defaults.
-    /// <para>Default: null</para>
-    /// </summary>
-    public int? ThreadCount { get; set; }
-
-    /// <summary>
     /// Creates a deep copy of these options.
     /// </summary>
     /// <returns>A new instance with the same values.</returns>

@@ -1,3 +1,5 @@
+using LMSupply.Hardware;
+
 namespace LMSupply.Reranker.Models;
 
 /// <summary>
@@ -44,13 +46,20 @@ public sealed class ModelRegistry
 
     /// <summary>
     /// Resolves a model identifier to its full information.
+    /// Supports "auto" alias which selects optimal model based on hardware.
     /// </summary>
-    /// <param name="modelIdOrAlias">Model ID, alias, or local path.</param>
+    /// <param name="modelIdOrAlias">Model ID, alias, local path, or "auto".</param>
     /// <returns>The model information.</returns>
     /// <exception cref="ModelNotFoundException">Thrown when model is not found.</exception>
     public ModelInfo Resolve(string modelIdOrAlias)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(modelIdOrAlias);
+
+        // Handle "auto" alias - select optimal model based on hardware
+        if (modelIdOrAlias.Equals("auto", StringComparison.OrdinalIgnoreCase))
+        {
+            return GetAutoModel();
+        }
 
         // Check if it's a local path
         if (IsLocalPath(modelIdOrAlias))
@@ -114,9 +123,42 @@ public sealed class ModelRegistry
     public IEnumerable<ModelInfo> GetAll() => _modelsById.Values;
 
     /// <summary>
-    /// Gets all available aliases.
+    /// Gets all available aliases including "auto".
     /// </summary>
-    public IEnumerable<string> GetAliases() => _modelsByAlias.Keys;
+    public IEnumerable<string> GetAliases()
+    {
+        yield return "auto";
+        foreach (var alias in _modelsByAlias.Keys)
+        {
+            yield return alias;
+        }
+    }
+
+    /// <summary>
+    /// Gets the optimal model based on current hardware profile.
+    /// Uses PerformanceTier to select appropriate model size.
+    /// </summary>
+    /// <remarks>
+    /// Tier mapping:
+    /// - Low:    ms-marco-MiniLM-L-6-v2 (22M params) - fast, lightweight
+    /// - Medium: bge-reranker-base (278M params) - balanced, multilingual
+    /// - High:   bge-reranker-large (560M params) - highest accuracy
+    /// - Ultra:  bge-reranker-large (560M params) - highest accuracy
+    /// </remarks>
+    public static ModelInfo GetAutoModel()
+    {
+        var tier = HardwareProfile.Current.Tier;
+
+        return tier switch
+        {
+            PerformanceTier.Ultra or PerformanceTier.High
+                => DefaultModels.BgeRerankerLarge,
+            PerformanceTier.Medium
+                => DefaultModels.BgeRerankerBase,
+            _
+                => DefaultModels.MsMarcoMiniLML6V2
+        };
+    }
 
     private static bool IsLocalPath(string path)
     {

@@ -24,18 +24,39 @@ internal sealed class CrossEncoderInference : IDisposable
     /// </summary>
     public InferenceSession Session => _session;
 
+    /// <summary>
+    /// Gets whether GPU acceleration is being used for inference.
+    /// </summary>
+    public bool IsGpuActive { get; private set; }
+
+    /// <summary>
+    /// Gets the list of active execution providers.
+    /// </summary>
+    public IReadOnlyList<string> ActiveProviders { get; private set; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Gets the execution provider that was requested.
+    /// </summary>
+    public ExecutionProvider RequestedProvider { get; private set; }
+
     private CrossEncoderInference(
         InferenceSession session,
         string[] inputNames,
         string outputName,
         OutputShape outputShape,
-        bool hasTokenTypeIds)
+        bool hasTokenTypeIds,
+        bool isGpuActive,
+        IReadOnlyList<string> activeProviders,
+        ExecutionProvider requestedProvider)
     {
         _session = session;
         _inputNames = inputNames;
         _outputName = outputName;
         _outputShape = outputShape;
         _hasTokenTypeIds = hasTokenTypeIds;
+        IsGpuActive = isGpuActive;
+        ActiveProviders = activeProviders;
+        RequestedProvider = requestedProvider;
     }
 
     /// <summary>
@@ -66,14 +87,14 @@ internal sealed class CrossEncoderInference : IDisposable
 
         try
         {
-            var session = await OnnxSessionFactory.CreateAsync(
+            var result = await OnnxSessionFactory.CreateWithInfoAsync(
                 modelPath,
                 provider,
                 options => ConfigureSessionOptions(options, threadCount),
                 progress,
                 cancellationToken);
 
-            return CreateFromSession(session, modelInfo);
+            return CreateFromSessionResult(result, modelInfo);
         }
         catch (Exception ex) when (ex is not FileNotFoundException)
         {
@@ -130,7 +151,30 @@ internal sealed class CrossEncoderInference : IDisposable
             inputNames,
             outputName,
             modelInfo.OutputShape,
-            hasTokenTypeIds);
+            hasTokenTypeIds,
+            false,
+            new[] { "CPUExecutionProvider" },
+            ExecutionProvider.Cpu);
+    }
+
+    private static CrossEncoderInference CreateFromSessionResult(SessionCreationResult result, ModelInfo modelInfo)
+    {
+        // Detect input names
+        var inputNames = result.Session.InputMetadata.Keys.ToArray();
+        var hasTokenTypeIds = inputNames.Contains("token_type_ids");
+
+        // Detect output name
+        var outputName = result.Session.OutputMetadata.Keys.First();
+
+        return new CrossEncoderInference(
+            result.Session,
+            inputNames,
+            outputName,
+            modelInfo.OutputShape,
+            hasTokenTypeIds,
+            result.IsGpuActive,
+            result.ActiveProviders,
+            result.RequestedProvider);
     }
 
     private static void ConfigureSessionOptions(SessionOptions options, int? threadCount)

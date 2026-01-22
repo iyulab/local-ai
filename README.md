@@ -18,7 +18,7 @@
 
 ```csharp
 // This is all you need. No setup. No configuration. No API keys.
-await using var model = await LocalEmbedder.LoadAsync("default");
+await using var model = await LocalEmbedder.LoadAsync("auto");  // Hardware-optimized selection
 float[] embedding = await model.EmbedAsync("Hello, world!");
 ```
 
@@ -81,8 +81,8 @@ float[] embedding = await model.EmbedAsync("Hello, world!");
 ```csharp
 using LMSupply.Embedder;
 
-// ONNX models (default)
-await using var model = await LocalEmbedder.LoadAsync("default");
+// Use "auto" for hardware-optimized model selection
+await using var model = await LocalEmbedder.LoadAsync("auto");
 
 // Single text
 float[] embedding = await model.EmbedAsync("Hello, world!");
@@ -308,6 +308,34 @@ GGUF models are auto-detected by `-GGUF` or `_gguf` in repo name, or `.gguf` fil
 
 ---
 
+## Adaptive Model Selection ("auto" mode)
+
+Use `"auto"` to let LMSupply select the optimal model based on your hardware:
+
+```csharp
+// Hardware-optimized model selection
+await using var embedder = await LocalEmbedder.LoadAsync("auto");
+await using var generator = await LocalGenerator.LoadAsync("auto");
+await using var reranker = await LocalReranker.LoadAsync("auto");
+```
+
+LMSupply detects your hardware and selects models accordingly:
+
+| Performance Tier | Hardware | Embedder | Generator | Reranker |
+|------------------|----------|----------|-----------|----------|
+| **Low** | CPU only or GPU <4GB | bge-small (33M) | Llama-3.2-1B | MiniLM-L6 (22M) |
+| **Medium** | GPU 4-8GB | bge-base (110M) | Phi-3.5-mini | bge-reranker-base |
+| **High** | GPU 8-16GB | gte-large (434M) | Phi-4-mini | bge-reranker-large |
+| **Ultra** | GPU 16GB+ | gte-large (434M) | Phi-4 (14B) | bge-reranker-large |
+
+**Key benefits:**
+- **Zero configuration** - Just use `"auto"`, no hardware research needed
+- **Optimal performance** - Larger models on capable hardware
+- **Graceful degradation** - Smaller models on limited hardware
+- **Backward compatible** - Existing aliases (`"default"`, `"fast"`, `"quality"`) still work
+
+---
+
 ## GPU Acceleration
 
 GPU acceleration is **automatic** — LMSupply detects your hardware and downloads appropriate runtime binaries on first use:
@@ -420,12 +448,33 @@ Models are cached following HuggingFace Hub conventions:
 
 ## Requirements
 
+### Software
 - .NET 10.0+
-- Windows, Linux, or macOS
+- Windows 10+, Linux, or macOS 11+
+
+### Hardware (Recommended)
+
+| Use Case | RAM | GPU VRAM | Notes |
+|----------|-----|----------|-------|
+| **Embeddings** | 4GB+ | Optional | CPU works fine for small models |
+| **Reranking** | 8GB+ | 4GB+ | GPU recommended for large models |
+| **Text Generation** | 16GB+ | 8GB+ | VRAM strongly recommended |
+| **Speech (Whisper)** | 8GB+ | 4GB+ | GPU significantly faster |
+| **Vision (Detection/Captioning)** | 8GB+ | 4GB+ | GPU recommended |
+
+**Minimum for "auto" mode:**
+- Any modern CPU with 8GB RAM
+- For best experience: NVIDIA GPU with 8GB+ VRAM
 
 ---
 
 ## Documentation
+
+### Getting Started
+- [Model Lifecycle](docs/MODEL_LIFECYCLE.md) - Loading, using, and disposing models
+- [GPU Providers](docs/GPU_PROVIDERS.md) - GPU acceleration and provider selection
+- [Memory Requirements](docs/MEMORY_REQUIREMENTS.md) - Model memory requirements and OOM prevention
+- [Troubleshooting](docs/TROUBLESHOOTING.md) - Common issues and solutions
 
 ### Text & Language
 - [Embedder Guide](docs/embedder.md) - Text → Vector embeddings

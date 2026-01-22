@@ -1,3 +1,5 @@
+using LMSupply.Hardware;
+
 namespace LMSupply.Segmenter.Models;
 
 /// <summary>
@@ -34,12 +36,19 @@ public sealed class SegmenterModelRegistry
 
     /// <summary>
     /// Resolves a model identifier to its full information.
+    /// Supports "auto" alias which selects optimal model based on hardware.
     /// </summary>
-    /// <param name="modelIdOrAlias">Model ID, alias, or local path.</param>
+    /// <param name="modelIdOrAlias">Model ID, alias, local path, or "auto".</param>
     /// <returns>The model information.</returns>
     public SegmenterModelInfo Resolve(string modelIdOrAlias)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(modelIdOrAlias);
+
+        // Handle "auto" alias - select optimal model based on hardware
+        if (modelIdOrAlias.Equals("auto", StringComparison.OrdinalIgnoreCase))
+        {
+            return GetAutoModel();
+        }
 
         // Check if it's a local path
         if (IsLocalPath(modelIdOrAlias))
@@ -66,9 +75,33 @@ public sealed class SegmenterModelRegistry
         }
 
         throw new ModelNotFoundException(
-            $"Model '{modelIdOrAlias}' not found. Use a built-in alias (default, fast, quality, large, interactive), " +
+            $"Model '{modelIdOrAlias}' not found. Use a built-in alias (default, fast, quality, large, interactive, auto), " +
             "a HuggingFace model ID (org/model), or a local file path.",
             modelIdOrAlias);
+    }
+
+    /// <summary>
+    /// Gets the optimal model based on current hardware profile.
+    /// Uses PerformanceTier to select appropriate model size.
+    /// </summary>
+    /// <remarks>
+    /// Tier mapping (semantic segmentation focus):
+    /// - Low:    SegFormer-B0 (3.7M params) - lightweight
+    /// - Medium: SegFormer-B1 (13.7M params) - balanced
+    /// - High:   SegFormer-B2 (27.4M params) - quality
+    /// - Ultra:  SegFormer-B5 (84.6M params) - highest accuracy
+    /// </remarks>
+    public static SegmenterModelInfo GetAutoModel()
+    {
+        var tier = HardwareProfile.Current.Tier;
+
+        return tier switch
+        {
+            PerformanceTier.Ultra => DefaultModels.SegFormerB5,
+            PerformanceTier.High => DefaultModels.SegFormerB2,
+            PerformanceTier.Medium => DefaultModels.SegFormerB1,
+            _ => DefaultModels.SegFormerB0
+        };
     }
 
     /// <summary>
@@ -97,9 +130,16 @@ public sealed class SegmenterModelRegistry
     public IEnumerable<SegmenterModelInfo> GetAll() => _modelsById.Values;
 
     /// <summary>
-    /// Gets all available aliases.
+    /// Gets all available aliases including "auto".
     /// </summary>
-    public IEnumerable<string> GetAliases() => _modelsByAlias.Keys;
+    public IEnumerable<string> GetAliases()
+    {
+        yield return "auto";
+        foreach (var alias in _modelsByAlias.Keys)
+        {
+            yield return alias;
+        }
+    }
 
     private static bool IsLocalPath(string path)
     {

@@ -33,6 +33,12 @@ public interface ITranscriberModel : IAsyncDisposable
     ExecutionProvider RequestedProvider { get; }
 
     /// <summary>
+    /// Gets the estimated memory usage of this model in bytes.
+    /// Based on ONNX model file size with overhead factor.
+    /// </summary>
+    long? EstimatedMemoryBytes { get; }
+
+    /// <summary>
     /// Warms up the model by running a dummy inference.
     /// </summary>
     /// <param name="cancellationToken">Cancellation token.</param>

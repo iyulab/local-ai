@@ -23,8 +23,24 @@ internal sealed class OnnxSegmenterModel : ISegmenterModel
     private bool _isInitialized;
     private bool _disposed;
 
+    // Runtime diagnostics
+    private bool _isGpuActive;
+    private IReadOnlyList<string> _activeProviders = Array.Empty<string>();
+
     /// <inheritdoc />
     public string ModelId => _modelInfo.Id;
+
+    /// <inheritdoc />
+    public bool IsGpuActive => _isGpuActive;
+
+    /// <inheritdoc />
+    public IReadOnlyList<string> ActiveProviders => _activeProviders;
+
+    /// <inheritdoc />
+    public ExecutionProvider RequestedProvider => _options.Provider;
+
+    /// <inheritdoc />
+    public long? EstimatedMemoryBytes => _modelInfo.SizeBytes * 2;
 
     /// <summary>
     /// Gets the class labels for this model.
@@ -278,11 +294,15 @@ internal sealed class OnnxSegmenterModel : ISegmenterModel
                 return;
 
             var modelPath = await ResolveModelPathAsync(cancellationToken);
-            _session = await OnnxSessionFactory.CreateAsync(
+            var result = await OnnxSessionFactory.CreateWithInfoAsync(
                 modelPath,
                 _options.Provider,
                 ConfigureSessionOptions,
                 cancellationToken: cancellationToken);
+
+            _session = result.Session;
+            _isGpuActive = result.IsGpuActive;
+            _activeProviders = result.ActiveProviders;
 
             _isInitialized = true;
         }
